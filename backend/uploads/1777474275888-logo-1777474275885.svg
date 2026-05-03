@@ -1,0 +1,12 @@
+<svg width="250" height="100" viewBox="0 0 250 100" xmlns="http://www.w3.org/2000/svg">
+  <text x="125" y="70" font-family="system-ui, sans-serif" font-size="32" font-weight="500" text-anchor="middle" fill="#2F2E41">L'Âme Orée</text>
+
+  <!-- Main Symbol: Elegant droplet/petal in muted rose -->
+  <path d="M125 25 C120 30 120 40 125 45 C130 40 130 30 125 25Z" fill="#8A5C6F"/>
+  
+  <!-- Subtle highlight within the symbol in off-white -->
+  <line x1="125" y1="28" x2="125" y2="42" stroke="#F8F3E9" stroke-width="1" stroke-linecap="round"/>
+  
+  <!-- Subtle natural accent: a small circle at the base of the droplet in sage green -->
+  <circle cx="125" cy="47" r="2" fill="#5E6E60"/>
+</svg>

@@ -1,0 +1,50 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Primary Color: #B8860B (Goldenrod) -->
+  <!-- Secondary Color: #E0C28F (Light Gold/Cream) -->
+  <!-- Accent Color: #2F1E08 (Dark Brown) -->
+
+  <!-- Coffee Cup Body -->
+  <path
+    d="M 70 110 C 65 110 60 105 60 100 L 60 60 C 60 55 65 50 70 50 L 130 50 C 135 50 140 55 140 60 L 140 100 C 140 105 135 110 130 110 Z"
+    fill="#2F1E08"
+  />
+
+  <!-- Coffee Cup Handle -->
+  <path
+    d="M 140 70 A 15 15 0 0 1 140 90 L 145 90 A 10 10 0 0 0 145 70 Z"
+    fill="#2F1E08"
+  />
+
+  <!-- Steam Line 1 -->
+  <path
+    d="M 90 45 C 95 35 105 35 110 45"
+    stroke="#E0C28F"
+    stroke-width="5"
+    fill="none"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Steam Line 2 -->
+  <path
+    d="M 85 40 C 90 30 100 30 105 40"
+    stroke="#E0C28F"
+    stroke-width="5"
+    fill="none"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Brand Name "إيلاف" -->
+  <text
+    x="100"
+    y="155"
+    font-family="Arial, 'Helvetica Neue', Helvetica, sans-serif"
+    font-size="40"
+    font-weight="bold"
+    text-anchor="middle"
+    fill="#B8860B"
+  >
+    إيلاف
+  </text>
+</svg>

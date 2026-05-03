@@ -1,0 +1,10 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <rect width="200" height="200" fill="#f0e68c"/>
+  <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" fill="#2e2e2e" letter-spacing="2">
+    <tspan x="50%" dy="0em">Sylvan</tspan>
+    <tspan x="50%" dy="1.5em" font-weight="bold" fill="#965200">Elixir</tspan>
+  </text>
+  <circle cx="100" cy="40" r="10" fill="#d48c00" opacity="0.7"/>
+  <circle cx="100" cy="160" r="10" fill="#d48c00" opacity="0.7"/>
+  <line x1="100" y1="50" x2="100" y2="150" stroke="#2e2e2e" stroke-width="3" stroke-dasharray="5,5"/>
+</svg>

@@ -1,0 +1,16 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .primary-text { fill: #000000; font-family: 'Arial', sans-serif; font-weight: bold; }
+    .secondary-icon { fill: #3b82f6; }
+    .accent-icon { fill: #60a5fa; }
+  </style>
+
+  <!-- Icon: Stylized perfume bottle drop -->
+  <g transform="translate(100, 70)">
+    <path class="secondary-icon" d="M0,40 C-5,30 5,30 0,0 C5,30 -5,30 0,40 Z" />
+    <ellipse class="accent-icon" cx="0" cy="40" rx="12" ry="6" />
+  </g>
+
+  <!-- Brand Name -->
+  <text x="100" y="150" text-anchor="middle" font-size="24" class="primary-text">Test Store</text>
+</svg>

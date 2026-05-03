@@ -1,0 +1,21 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .background { fill: #1A237E; }
+    .text { fill: #B0BEC5; font-family: 'Arial', sans-serif; font-weight: bold; }
+    .accent { fill: #FFD700; }
+    .outline { stroke: #455A64; stroke-width: 2; fill: none; }
+  </style>
+
+  <!-- Background element -->
+  <rect width="200" height="200" class="background"/>
+
+  <!-- Gilded Bean element - stylized coffee bean -->
+  <g transform="translate(100, 100) scale(0.6)">
+    <path class="outline" d="M-30,-50 C-40,-20 -40,20 -30,50 L30,50 C40,20 40,-20 30,-50 Z"/>
+    <path class="outline" d="M0,-45 L0,45"/>
+    <ellipse cx="0" cy="0" rx="10" ry="25" class="accent"/>
+  </g>
+
+  <!-- Text element -->
+  <text x="100" y="170" text-anchor="middle" class="text" font-size="20">THE GILDED BEAN</text>
+</svg>

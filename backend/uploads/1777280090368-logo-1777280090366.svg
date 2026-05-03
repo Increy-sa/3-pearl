@@ -1,0 +1,19 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .primary { fill: #1A237E; }
+    .secondary { fill: #7E57C2; }
+    .accent { fill: #D1C4E9; }
+    .text { font-family: 'Arial', sans-serif; font-weight: 400; }
+  </style>
+
+  <!-- Icon: Stylized perfume bottle droplet -->
+  <g transform="translate(100, 50)">
+    <path d="M 0 -30 Q 0 -20 15 -20 L 15 -5 Q 15 0 0 0 Z" class="secondary"/>
+    <path d="M 0 -30 Q 0 -20 -15 -20 L -15 -5 Q -15 0 0 0 Z" class="secondary"/>
+    <path d="M 0 0 Q 0 15 -15 15 L -15 30 Q -15 45 0 45 L 0 30 Q 0 15 15 15 L 15 30 Q 15 45 0 45 Z" class="primary"/>
+    <circle cx="0" cy="35" r="10" class="accent"/>
+  </g>
+
+  <!-- Brand Name -->
+  <text x="100" y="150" text-anchor="middle" font-size="24" class="text primary">Aurum Veil</text>
+</svg>

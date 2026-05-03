@@ -1,0 +1,6 @@
+<svg width="300" height="220" viewBox="0 0 300 220" xmlns="http://www.w3.org/2000/svg">
+  <path d="M150,30 C130,35 130,65 150,70 C170,65 170,35 150,30 Z" fill="#a87d50"/>
+  <line x1="150" y1="38" x2="150" y2="62" stroke="#4f2b0e" stroke-width="2" stroke-linecap="round"/>
+  <text x="150" y="110" font-family="serif" font-size="45" font-weight="bold" text-anchor="middle" fill="#1a0d04">Velvet</text>
+  <text x="150" y="160" font-family="serif" font-size="45" font-weight="normal" text-anchor="middle" fill="#4f2b0e">Origin</text>
+</svg>

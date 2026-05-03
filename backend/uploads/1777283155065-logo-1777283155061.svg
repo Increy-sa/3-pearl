@@ -1,0 +1,18 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .primary { fill: #0D0D0D; }
+    .secondary { fill: #C0C0C0; }
+    .accent { fill: #8B008B; }
+    .text { font-family: 'Arial', sans-serif; font-weight: bold; }
+  </style>
+
+  <!-- Icon: Stylized Circuit Trace/Wave -->
+  <g transform="translate(50, 50)">
+    <path class="accent" d="M0 20 L 20 20 L 20 40 L 40 40 L 40 0 L 20 0 L 20 20 Z" />
+    <path class="secondary" d="M40 20 L 60 20 L 60 40 L 80 40 L 80 0 L 60 0 L 60 20 Z" />
+    <path class="primary" d="M80 20 L 100 20 L 100 40 L 120 40 L 120 0 L 100 0 L 100 20 Z" />
+  </g>
+
+  <!-- Brand Name -->
+  <text x="25" y="170" class="text primary" font-size="30">نوروم</text>
+</svg>

@@ -1,0 +1,20 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .primary { fill: #800000; }
+      .secondary { fill: #DA70D6; }
+      .accent { fill: #FF69B4; }
+      .text { font-family: 'Arial', sans-serif; font-weight: bold; }
+    </style>
+  </defs>
+
+  <!-- Coffee Bean Icon -->
+  <g transform="translate(50, 50) scale(0.8)">
+    <path class="primary" d="M50,0 C22.386,0,0,22.386,0,50c0,27.614,22.386,50,50,50s50-22.386,50-50C100,22.386,77.614,0,50,0z M50,90C27.909,90,10,72.091,10,50S27.909,10,50,10s40,17.909,40,40S72.091,90,50,90z"/>
+    <circle class="accent" cx="50" cy="50" r="10"/>
+  </g>
+
+  <!-- Brand Name -->
+  <text x="100" y="110" text-anchor="middle" class="text" font-size="30" fill="#800000">صدى</text>
+
+</svg>
