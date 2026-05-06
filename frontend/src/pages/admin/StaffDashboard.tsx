@@ -214,7 +214,7 @@ export function StaffDashboard() {
           </div>
         </div>
       )}
-
+ 
       {/* Detail Panel */}
       {selectedTicket && (
         <TicketDetailPanel
