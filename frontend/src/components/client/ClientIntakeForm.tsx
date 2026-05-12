@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { Send, Loader2 } from 'lucide-react';
-import { simulateAIProposal } from '../../lib/mockData';
 
-export function ClientIntakeForm({ onProposalGenerated, legalData, onBack }: { 
+export function ClientIntakeForm({ onProposalGenerated, legalData, onBack }: {
   onProposalGenerated: (data: any) => void;
   legalData: any;
   onBack: () => void;
@@ -13,14 +12,14 @@ export function ClientIntakeForm({ onProposalGenerated, legalData, onBack }: {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    
+
     const formData = new FormData(e.target as HTMLFormElement);
     let finalIndustry = formData.get('industry') as string;
     if (finalIndustry === 'other') {
       finalIndustry = formData.get('otherIndustry') as string;
     }
 
-    const data = { 
+    const data = {
       ...legalData,
       businessName: formData.get('businessName'),
       industry: finalIndustry,
@@ -34,9 +33,9 @@ export function ClientIntakeForm({ onProposalGenerated, legalData, onBack }: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
-      
+
       const result = await response.json();
-      onProposalGenerated(result.aiProposal);
+      onProposalGenerated(result.aiProposal, data);
     } catch (error) {
       console.error("Failed to generate AI proposal:", error);
       alert('حدث خطأ أثناء توليد المقترح. تأكد من تشغيل الخادم الخلفي.');
@@ -52,7 +51,7 @@ export function ClientIntakeForm({ onProposalGenerated, legalData, onBack }: {
           <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">تفاصيل المتجر</h2>
           <p className="text-slate-500 mt-2">أخبرنا عن نشاطك التجاري، وسيقوم الذكاء الاصطناعي بتوليد مقترح علامة تجارية مخصص لك.</p>
         </div>
-        <button 
+        <button
           onClick={onBack}
           className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"
           type="button"
@@ -69,8 +68,8 @@ export function ClientIntakeForm({ onProposalGenerated, legalData, onBack }: {
 
         <div className="space-y-2">
           <label className="text-sm font-medium text-slate-700">مجال العمل</label>
-          <select 
-            required 
+          <select
+            required
             name="industry"
             value={industry}
             onChange={(e) => setIndustry(e.target.value)}
@@ -87,12 +86,12 @@ export function ClientIntakeForm({ onProposalGenerated, legalData, onBack }: {
         {industry === 'other' && (
           <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
             <label className="text-sm font-medium text-slate-700">يرجى كتابة مجال العمل</label>
-            <input 
-              required 
+            <input
+              required
               name="otherIndustry"
-              type="text" 
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none text-start" 
-              placeholder="مثلاً: بيع العطور المستوحاة" 
+              type="text"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none text-start"
+              placeholder="مثلاً: بيع العطور المستوحاة"
             />
           </div>
         )}
@@ -107,9 +106,9 @@ export function ClientIntakeForm({ onProposalGenerated, legalData, onBack }: {
           <input required name="targetAudience" type="text" className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none text-start" placeholder="مثال: الشباب، المهتمين بالتقنية" />
         </div>
 
-        <button 
+        <button
           disabled={loading}
-          type="submit" 
+          type="submit"
           className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl transition-colors mt-6 flex items-center justify-center gap-2 disabled:opacity-70"
         >
           {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 rtl:-scale-x-100" />}

@@ -8,7 +8,7 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
-import { decrypt } from '../utils/crypto';
+import { encrypt, decrypt } from '../utils/crypto';
 import { SLA_HOURS, STAGE_LABELS } from '../config/stages';
 
 const router = Router();
@@ -145,7 +145,7 @@ router.get('/members', authenticateToken, async (req: AuthRequest, res) => {
 router.put(
   '/tickets/:id/assign',
   authenticateToken,
-  requireRole('ADMIN', 'ACCOUNT_MANAGER'),
+  requireRole('ADMIN', 'ACCOUNT_MANAGER', 'DESIGNER'),
   async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
@@ -272,6 +272,98 @@ router.put(
     } catch (e: any) {
       console.error('[staff/toggle-password] Error:', e.message);
       res.status(500).json({ error: 'فشل تغيير حالة كلمة المرور' });
+    }
+  }
+);
+
+// ════════════════════════════════════════════════════════════════
+// PUT /api/staff/tickets/:id/legal-processing
+// ════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+
+router.put(
+  '/tickets/:id/legal-processing',
+  authenticateToken,
+  requireRole('ADMIN', 'ACCOUNT_MANAGER'),
+  async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { documentFileUrl, domainName, sallaStoreUrl, storeEmail, storePassword } = req.body;
+
+      const ticket = await prisma.ticket.findUnique({ where: { id } });
+      if (!ticket) return res.status(404).json({ error: 'الطلب غير موجود' });
+
+      // Update ClientInfo for documentFileUrl
+      if (documentFileUrl) {
+        await prisma.clientInfo.update({
+          where: { id: ticket.clientId },
+          data: { documentFileUrl, hasDocument: true, legalDocUrl: documentFileUrl, hasLegalDoc: true }
+        });
+      }
+
+      // Update or Create StoreDetails
+      const storeData: any = {};
+      if (domainName !== undefined) storeData.domainName = domainName;
+      if (sallaStoreUrl !== undefined) storeData.sallaStoreUrl = sallaStoreUrl;
+      if (storeEmail !== undefined) storeData.storeEmail = storeEmail;
+      if (storePassword) storeData.storePasswordEncrypted = encrypt(storePassword);
+
+      if (Object.keys(storeData).length > 0) {
+        const existingStore = await prisma.storeDetails.findUnique({ where: { ticketId: id } });
+        if (existingStore) {
+          await prisma.storeDetails.update({ where: { ticketId: id }, data: storeData });
+        } else {
+          await prisma.storeDetails.create({ data: { ticketId: id, ...storeData } });
+        }
+      }
+
+      const updated = await prisma.ticket.findUnique({
+        where: { id },
+        include: FULL_TICKET_INCLUDE
+      });
+
+      res.json(updated);
+    } catch (e: any) {
+      console.error('[staff/legal-processing] Error:', e.message);
+      res.status(500).json({ error: 'فشل حفظ البيانات القانونية' });
+    }
+  }
+);
+
+// ════════════════════════════════════════════════════════════════
+// PUT /api/staff/tickets/:id/design-files
+// ════════════════════════════════════════════════════════════════
+router.put(
+  '/tickets/:id/design-files',
+  authenticateToken,
+  requireRole('ADMIN', 'DESIGNER'),
+  async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { designLogoUrl, designBannersUrl, designCategoriesUrl } = req.body;
+
+      const ticket = await prisma.ticket.findUnique({ where: { id } });
+      if (!ticket) return res.status(404).json({ error: 'الطلب غير موجود' });
+
+      const updated = await prisma.ticket.update({
+        where: { id },
+        data: { designLogoUrl, designBannersUrl, designCategoriesUrl },
+        include: FULL_TICKET_INCLUDE
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          ticketId: id,
+          userId: req.user!.userId,
+          action: 'UPDATED_NOTES',
+          details: JSON.stringify({ message: 'تم تحديث ملفات التصميم' }),
+        },
+      });
+
+      res.json(updated);
+    } catch (e: any) {
+      console.error('[staff/design-files] Error:', e.message);
+      res.status(500).json({ error: 'فشل حفظ ملفات التصميم' });
     }
   }
 );

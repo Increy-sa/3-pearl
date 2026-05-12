@@ -9,7 +9,12 @@ export const STAGES = [
   'INTAKE',
   'LEGAL_PROCESSING',
   'DESIGN',
+  'PENDING_CLIENT_APPROVAL',  // Design sent to client for approval
+  'CLIENT_APPROVED',           // Client approved the designs
+  'CLIENT_REVISION',           // Client requested revision
   'DEVELOPMENT',
+  'PENDING_AM_REVIEW',         // Developer done → awaiting Account Manager review
+  'DEVELOPMENT_REVISION',      // AM requested revision → back to developer
   'REVIEW',
   'DELIVERED',
 ] as const;
@@ -18,40 +23,53 @@ export type Stage = typeof STAGES[number];
 
 /**
  * Per-stage SLA thresholds in hours.
- * If a ticket remains in a stage longer than this, it is flagged as breached.
  */
 export const SLA_HOURS: Record<Stage, number> = {
-  INTAKE:           24,
-  LEGAL_PROCESSING: 48,
-  DESIGN:           48,
-  DEVELOPMENT:      72,
-  REVIEW:           24,
-  DELIVERED:        0,  // No SLA for delivered tickets
+  INTAKE:                   24,
+  LEGAL_PROCESSING:         48,
+  DESIGN:                   48,
+  PENDING_CLIENT_APPROVAL:  72,
+  CLIENT_APPROVED:           0,
+  CLIENT_REVISION:          48,
+  DEVELOPMENT:              72,
+  PENDING_AM_REVIEW:        24,  // AM should review within 24h
+  DEVELOPMENT_REVISION:     48,  // Developer must fix within 48h
+  REVIEW:                   24,
+  DELIVERED:                 0,
 };
 
 /**
  * Allowed forward transitions.
- * Each stage maps to the stages it can advance to.
  */
 export const STAGE_TRANSITIONS: Record<Stage, Stage[]> = {
-  INTAKE:           ['LEGAL_PROCESSING'],
-  LEGAL_PROCESSING: ['DESIGN'],
-  DESIGN:           ['DEVELOPMENT'],
-  DEVELOPMENT:      ['REVIEW'],
-  REVIEW:           ['DELIVERED', 'DESIGN'], // Can send back to DESIGN for revisions
-  DELIVERED:        [],
+  INTAKE:                   ['LEGAL_PROCESSING'],
+  LEGAL_PROCESSING:         ['DESIGN'],
+  DESIGN:                   ['PENDING_CLIENT_APPROVAL', 'DEVELOPMENT'],
+  PENDING_CLIENT_APPROVAL:  ['CLIENT_APPROVED', 'CLIENT_REVISION'],
+  CLIENT_APPROVED:          ['DEVELOPMENT'],
+  CLIENT_REVISION:          ['DESIGN'],
+  DEVELOPMENT:              ['PENDING_AM_REVIEW'],
+  PENDING_AM_REVIEW:        ['DELIVERED', 'DEVELOPMENT_REVISION'],  // AM approves → DELIVERED directly, or revision → back to dev
+  DEVELOPMENT_REVISION:     ['PENDING_AM_REVIEW'],
+  REVIEW:                   ['DELIVERED', 'DESIGN'],
+  DELIVERED:                [],
 };
 
 /**
  * Stage display labels (Arabic).
  */
 export const STAGE_LABELS: Record<Stage, string> = {
-  INTAKE:           'استلام الطلب',
-  LEGAL_PROCESSING: 'المعالجة القانونية',
-  DESIGN:           'التصميم',
-  DEVELOPMENT:      'التطوير والبرمجة',
-  REVIEW:           'المراجعة والفحص',
-  DELIVERED:        'تم التسليم',
+  INTAKE:                   'استلام الطلب',
+  LEGAL_PROCESSING:         'المعالجة القانونية',
+  DESIGN:                   'التصميم',
+  PENDING_CLIENT_APPROVAL:  'بانتظار اعتماد العميل',
+  CLIENT_APPROVED:          'معتمد من العميل',
+  CLIENT_REVISION:          'طلب تعديل من العميل',
+  DEVELOPMENT:              'التطوير والبرمجة',
+  PENDING_AM_REVIEW:        'بانتظار مراجعة مدير الحساب',
+  DEVELOPMENT_REVISION:     'تعديل من مدير الحساب',
+  REVIEW:                   'المراجعة والفحص',
+  DELIVERED:                'تم التسليم',
 };
 
 /**

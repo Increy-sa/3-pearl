@@ -8,6 +8,7 @@ import { AIProposalView } from '../components/client/AIProposalView';
 export function ClientPortal() {
   const [step, setStep] = useState(1);
   const [legalData, setLegalData] = useState<any>(null);
+  const [intakeData, setIntakeData] = useState<any>(null);
   const [proposal, setProposal] = useState<any>(null);
 
   const { user } = useAuthStore();
@@ -26,8 +27,9 @@ export function ClientPortal() {
     setStep(2);
   };
 
-  const handleProposalGenerated = (data: any) => {
-    setProposal(data);
+  const handleProposalGenerated = (proposalData: any, formIntakeData: any) => {
+    setIntakeData(formIntakeData);
+    setProposal(proposalData);
   };
 
   const steps = [
@@ -68,7 +70,11 @@ export function ClientPortal() {
 
         {step === 2 && (
           proposal ? (
-            <AIProposalView proposal={proposal} />
+            <AIProposalView 
+              proposal={proposal} 
+              legalData={legalData}
+              intakeData={intakeData}
+            />
           ) : (
             <ClientIntakeForm
               legalData={legalData}
@@ -81,3 +87,4 @@ export function ClientPortal() {
     </div>
   );
 }
+

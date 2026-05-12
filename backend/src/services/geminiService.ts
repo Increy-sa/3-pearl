@@ -35,6 +35,91 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 //   gemini-2.5-flash-lite → fallback (fastest, budget-friendly)
 // ============================================================
 
+/**
+ * Generates a comprehensive brand identity proposal using AI.
+ * Returns the full schema: suggestedName, slogan, brandColors, logoDescription,
+ * brandPersonality, brandVoice, typography, and rationale.
+ */
+export async function generateFullBrandIdentity(
+  businessName: string,
+  industry: string,
+  description: string,
+  targetAudience: string
+) {
+  const modelNames = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+  let lastError: any;
+
+  const genAI = getGenAI();
+
+  const prompt = `أنت خبير عالمي في تصميم الهوية البصرية للمتاجر والعلامات التجارية العربية.
+
+بيانات المتجر:
+- اسم النشاط التجاري: ${businessName}
+- مجال العمل: ${industry}
+- وصف النشاط: ${description}
+- الجمهور المستهدف: ${targetAudience}
+
+المطلوب: قم بتوليد مقترح هوية بصرية كامل ومتميز بناءً على البيانات أعلاه.
+
+أرجع الرد بصيغة JSON فقط بدون أي نص إضافي، بهذا الشكل بالضبط:
+{
+  "suggestedName": "اسم مقترح مبتكر للعلامة التجارية (يجب أن يكون مختلفاً عن اسم النشاط الأصلي)",
+  "alternativeNames": ["اسم بديل 1", "اسم بديل 2", "اسم بديل 3", "اسم بديل 4"],
+  "slogan": "شعار أو tagline قصير وجذاب",
+  "brandColors": [
+    { "name": "اسم اللون", "hex": "#XXXXXX", "usage": "الاستخدام الرئيسي" },
+    { "name": "اسم اللون", "hex": "#XXXXXX", "usage": "الاستخدام الثانوي" },
+    { "name": "اسم اللون", "hex": "#XXXXXX", "usage": "لون التمييز" },
+    { "name": "اسم اللون", "hex": "#XXXXXX", "usage": "لون الخلفية" }
+  ],
+  "logoDescription": "وصف تفصيلي للشعار المقترح يشمل الشكل والأسلوب والرموز المستخدمة",
+  "brandPersonality": "شخصية العلامة التجارية (مثلاً: فاخرة، شبابية، احترافية، مرحة)",
+  "brandVoice": "أسلوب التواصل مع الجمهور (مثلاً: ودي ومهني، عصري وملهم)",
+  "typography": {
+    "arabic": "نوع خط عربي مقترح مع السبب",
+    "latin": "نوع خط لاتيني مقترح مع السبب"
+  },
+  "rationale": "شرح مختصر لأسباب هذه الاختيارات وكيف تخدم النشاط التجاري والجمهور المستهدف"
+}
+
+ملاحظات مهمة:
+- اختر ألواناً متناسقة واحترافية تناسب المجال والجمهور المستهدف.
+- الأسماء يجب أن تكون سهلة النطق والتذكر.
+- الرد يجب أن يكون كائن JSON خام فقط بدون أي نصوص أو شروحات خارجية.`;
+
+  for (const modelName of modelNames) {
+    try {
+      console.log(`[AI] Attempting full brand identity with model: ${modelName}...`);
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text().trim();
+      console.log(`[AI] ✅ Success with ${modelName}`);
+      const cleanedText = cleanJSON(text);
+      const parsed = JSON.parse(cleanedText);
+
+      // Validate required fields
+      if (!parsed.suggestedName || !parsed.brandColors || !parsed.brandVoice) {
+        throw new Error("Invalid response structure — missing required fields");
+      }
+
+      return parsed;
+    } catch (error: any) {
+      console.error(`[AI] ❌ Failed with ${modelName}: ${error.message}`);
+      lastError = error;
+      if (modelNames.indexOf(modelName) < modelNames.length - 1) {
+        const is503 = error.message?.includes('503') || error.message?.includes('Service Unavailable');
+        await sleep(is503 ? 3000 : 800);
+      }
+    }
+  }
+  throw lastError || new Error("All AI models failed");
+}
+
+/**
+ * Legacy brand proposal generator — kept for backward compatibility
+ * with the /api/ai/suggest-brand endpoint.
+ */
 export async function generateBrandProposal(businessName: string, industry: string, description: string) {
   const modelNames = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
   let lastError: any;
@@ -70,8 +155,6 @@ export async function generateBrandProposal(businessName: string, industry: stri
       console.error(`[AI] ❌ Failed with ${modelName}: ${error.message}`);
       lastError = error;
       const is503 = error.message?.includes('503') || error.message?.includes('Service Unavailable');
-      const is429 = error.message?.includes('429') || error.message?.includes('Too Many Requests');
-      // Wait longer for 503 (overloaded), shorter for other errors
       if (modelNames.indexOf(modelName) < modelNames.length - 1) {
         await sleep(is503 ? 3000 : 800);
       }
@@ -124,4 +207,3 @@ export async function generateLogoSVG(brandName: string, industry: string, color
   </svg>`;
   return `data:image/svg+xml;base64,${Buffer.from(fallbackSVG).toString('base64')}`;
 }
-
