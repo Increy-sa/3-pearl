@@ -59,7 +59,7 @@ if [ ! -d "$PROJECT_DIR" ]; then
     git clone https://github.com/ahmedhelm-y/Salla-Task-Manager.git "$PROJECT_DIR"
 else
     log "Project directory exists. Pulling latest code..."
-    cd "$PROJECT_DIR" && git pull origin main   
+    cd "$PROJECT_DIR" && git pull origin main
 fi
 
 # ── Create logs directory ─────────────────────────────────────────────────────
