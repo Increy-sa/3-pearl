@@ -1,7 +1,8 @@
-import React, { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { TicketCard } from './TicketCard';
 import { useAuthStore } from '../../store/useAuthStore';
 import { Loader2 } from 'lucide-react';
+import { API_URL } from '../../config/api';
 
 export function TicketBoard() {
   const { user, token } = useAuthStore();
@@ -11,7 +12,7 @@ export function TicketBoard() {
   useEffect(() => {
     const fetchTickets = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/tickets', {
+        const response = await fetch(`${API_URL}/api/tickets`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (response.ok) {
@@ -38,7 +39,7 @@ export function TicketBoard() {
     if (user.role === 'DESIGNER') {
       return tickets.filter(t => t.status === 'DESIGN_IN_PROGRESS' || t.designerId === user.id);
     }
-    if (user.role === 'PROGRAMMER') {
+    if (user.role === 'DEVELOPER') {
       return tickets.filter(t => t.status === 'DEVELOPMENT_IN_PROGRESS' || t.programmerId === user.id);
     }
     if (user.role === 'ACCOUNT_MANAGER') {

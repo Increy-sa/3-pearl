@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, Loader2, Upload, X, CheckCircle2, Image as ImageIcon, Plus, Edit2, Type, Palette } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+
 import { useAuthStore } from '../../store/useAuthStore';
+import { API_URL } from '../../config/api';
 
 const DEFAULT_INDUSTRIES = ['عطور', 'ملابس', 'إلكترونيات', 'قهوة', 'أخرى'];
 
@@ -49,7 +50,7 @@ export function BrandIdentityBoard({ legalData, onBack }: { legalData: any, onBa
     setError('');
     setAiLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/api/ai/suggest-brand', {
+      const response = await fetch(`${API_URL}/api/ai/suggest-brand`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ businessName, industry: finalIndustry, description })
@@ -117,7 +118,7 @@ export function BrandIdentityBoard({ legalData, onBack }: { legalData: any, onBa
     setError('');
     setLogoLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/api/ai/generate-logo', {
+      const response = await fetch(`${API_URL}/api/ai/generate-logo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ brandName: storeName, industry: finalIndustry, colors })
@@ -163,7 +164,7 @@ export function BrandIdentityBoard({ legalData, onBack }: { legalData: any, onBa
             });
             const fileData = await base64Promise;
 
-            const response = await fetch('http://localhost:5000/api/upload', {
+            const response = await fetch(`${API_URL}/api/upload`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ fileName: file.name, fileData })
@@ -185,7 +186,7 @@ export function BrandIdentityBoard({ legalData, onBack }: { legalData: any, onBa
       let finalLogoUrl = generatedLogoUrl;
       if (generatedLogoUrl && generatedLogoUrl.startsWith('data:')) {
         try {
-          const response = await fetch('http://localhost:5000/api/upload', {
+          const response = await fetch(`${API_URL}/api/upload`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -226,7 +227,7 @@ export function BrandIdentityBoard({ legalData, onBack }: { legalData: any, onBa
         hasDocument: payload.hasDocument,
       });
 
-      const response = await fetch('http://localhost:5000/api/tickets/create-final', {
+      const response = await fetch(`${API_URL}/api/tickets/create-final`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -234,7 +235,7 @@ export function BrandIdentityBoard({ legalData, onBack }: { legalData: any, onBa
 
       const data = await response.json();
       if (response.ok) {
-        login(data.user, data.token);
+        login(data.user, data.token, true);
         navigate('/dashboard/customer');
       } else {
         setError(data.error || 'حدث خطأ أثناء الإرسال');
@@ -246,7 +247,6 @@ export function BrandIdentityBoard({ legalData, onBack }: { legalData: any, onBa
     }
   };
 
-  const hasSuggestions = aiNames.length > 0 || aiPalettes.length > 0;
 
   return (
     <div className="max-w-4xl mx-auto bg-white p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl shadow-sm border border-slate-100 animate-in fade-in duration-500">

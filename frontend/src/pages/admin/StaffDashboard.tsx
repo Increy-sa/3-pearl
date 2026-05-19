@@ -1,12 +1,14 @@
-import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { TicketDetailPanel } from '../../components/staff/TicketDetailPanel';
 import {
   Loader2, AlertTriangle, RefreshCw, Activity, Eye, EyeOff,
-  ChevronDown, Shield
+  Trash2, Archive, ArchiveRestore
 } from 'lucide-react';
 
-const API = 'http://localhost:5000';
+import { API_URL } from '../../config/api';
+
+const API = API_URL;
 
 const STAGE_CONFIG: Record<string, { label: string; color: string; bg: string; dot: string }> = {
   INTAKE:                   { label: 'استلام الطلب',           color: 'text-sky-700',      bg: 'bg-sky-50 border-sky-200',         dot: 'bg-sky-500' },
@@ -21,8 +23,8 @@ const STAGE_CONFIG: Record<string, { label: string; color: string; bg: string; d
 };
 const STAGES_ORDER = ['INTAKE','LEGAL_PROCESSING','DESIGN','PENDING_CLIENT_APPROVAL','CLIENT_APPROVED','CLIENT_REVISION','DEVELOPMENT','REVIEW','DELIVERED'];
 
-const canChangeStage = (r: string) => ['ADMIN','ACCOUNT_MANAGER'].includes(r);
 const canAssign      = (r: string) => ['ADMIN','ACCOUNT_MANAGER'].includes(r);
+const canManage      = (r: string) => ['ADMIN','ACCOUNT_MANAGER'].includes(r);
 
 function SlaBadge({ breached, hours }: { breached: boolean; hours: number }) {
   if (breached) return (
@@ -35,14 +37,50 @@ function SlaBadge({ breached, hours }: { breached: boolean; hours: number }) {
   return <span className={`text-[11px] font-mono font-bold ${color}`}>{hours}h</span>;
 }
 
+/* ── Confirmation Modal ──────────────────────────────────────── */
+function ConfirmModal({ open, title, message, onConfirm, onCancel, danger }: {
+  open: boolean; title: string; message: string;
+  onConfirm: () => void; onCancel: () => void; danger?: boolean;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onCancel}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 sm:p-6 space-y-4 animate-in fade-in zoom-in-95" onClick={e => e.stopPropagation()}>
+        <h3 className="text-lg font-extrabold text-slate-900">{title}</h3>
+        <p className="text-sm text-slate-600 leading-relaxed">{message}</p>
+        <div className="flex gap-3 pt-2">
+          <button onClick={onCancel}
+            className="flex-1 px-4 py-3 sm:py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-200 transition-all duration-200 active:scale-95">
+            إلغاء
+          </button>
+          <button onClick={onConfirm}
+            className={`flex-1 px-4 py-3 sm:py-2.5 rounded-xl text-sm font-bold text-white transition-all duration-200 active:scale-95 ${
+              danger ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-500 hover:bg-amber-600'
+            }`}>
+            تأكيد
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function StaffDashboard() {
   const { token, user } = useAuthStore(); 
   const [tickets, setTickets]               = useState<any[]>([]);
+  const [archivedTickets, setArchivedTickets] = useState<any[]>([]);
   const [staff, setStaff]                   = useState<any[]>([]);
   const [loading, setLoading]               = useState(true);
   const [selectedTicket, setSelectedTicket] = useState<any>(null);
   const [stageFilter, setStageFilter]       = useState('ALL');
+  const [viewMode, setViewMode]             = useState<'active' | 'archived'>('active');
   const selectedTicketIdRef = useRef<string | null>(null);
+
+  // Confirmation modal state
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean; title: string; message: string; danger: boolean;
+    onConfirm: () => void;
+  }>({ open: false, title: '', message: '', danger: false, onConfirm: () => {} });
 
   // Keep ref in sync
   useEffect(() => {
@@ -56,8 +94,9 @@ export function StaffDashboard() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [tRes, sRes] = await Promise.all([
+      const [tRes, aRes, sRes] = await Promise.all([
         fetch(`${API}/api/staff/tickets`, { headers }),
+        fetch(`${API}/api/staff/tickets?archived=true`, { headers }),
         fetch(`${API}/api/staff/members`, { headers }),
       ]);
       if (tRes.ok) {
@@ -70,6 +109,7 @@ export function StaffDashboard() {
           if (updated) setSelectedTicket(updated);
         }
       }
+      if (aRes.ok) setArchivedTickets(await aRes.json());
       if (sRes.ok) setStaff(await sRes.json());
     } finally {
       setLoading(false);
@@ -85,10 +125,41 @@ export function StaffDashboard() {
     fetchData();
   };
 
+  const handleArchive = async (ticketId: string) => {
+    try {
+      await fetch(`${API}/api/staff/tickets/${ticketId}/archive`, {
+        method: 'PUT', headers,
+      });
+      fetchData();
+      if (selectedTicket?.id === ticketId) setSelectedTicket(null);
+    } catch (e) {
+      console.error('Archive failed:', e);
+    }
+  };
+
+  const handleDelete = async (ticketId: string) => {
+    try {
+      const res = await fetch(`${API}/api/staff/tickets/${ticketId}`, {
+        method: 'DELETE', headers,
+      });
+      if (res.ok) {
+        fetchData();
+        if (selectedTicket?.id === ticketId) setSelectedTicket(null);
+      } else {
+        const data = await res.json();
+        alert(data.error || 'فشل الحذف');
+      }
+    } catch (e) {
+      console.error('Delete failed:', e);
+    }
+  };
+
+  const currentList = viewMode === 'archived' ? archivedTickets : tickets;
+
   const visibleTickets = useMemo(() => {
-    if (stageFilter === 'ALL') return tickets;
-    return tickets.filter(t => t.stage === stageFilter);
-  }, [tickets, stageFilter]);
+    if (stageFilter === 'ALL') return currentList;
+    return currentList.filter(t => t.stage === stageFilter);
+  }, [currentList, stageFilter]);
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -96,34 +167,64 @@ export function StaffDashboard() {
     </div>
   );
 
+  const userRole = user?.role || '';
+
   return (
     <div className="space-y-6" dir="rtl">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900">غرفة العمليات</h1>
-          <p className="text-sm text-slate-500 mt-0.5">{visibleTickets.length} طلب • {user?.role}</p>
+          <h1 className="text-lg sm:text-xl lg:text-2xl font-extrabold text-slate-900">غرفة العمليات</h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">{visibleTickets.length} طلب • {user?.role}</p>
         </div>
         <button onClick={fetchData}
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors shadow-sm">
+          className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-600 hover:bg-slate-50 transition-all duration-200 shadow-sm active:scale-95">
           <RefreshCw className="w-4 h-4" /> تحديث
         </button>
       </div>
 
+      {/* View Mode Tabs (Active / Archived) */}
+      {canManage(userRole) && (
+        <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-full sm:w-fit">
+          <button onClick={() => { setViewMode('active'); setStageFilter('ALL'); }}
+            className={`flex-1 sm:flex-initial flex items-center justify-center sm:justify-start gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 ${
+              viewMode === 'active'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}>
+            <Activity className="w-4 h-4 shrink-0" />
+            <span className="hidden xs:inline">الطلبات النشطة</span>
+            <span className="xs:hidden">نشطة</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-600">{tickets.length}</span>
+          </button>
+          <button onClick={() => { setViewMode('archived'); setStageFilter('ALL'); }}
+            className={`flex-1 sm:flex-initial flex items-center justify-center sm:justify-start gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 ${
+              viewMode === 'archived'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}>
+            <Archive className="w-4 h-4 shrink-0" />
+            <span className="hidden xs:inline">أرشيف الطلبات</span>
+            <span className="xs:hidden">أرشيف</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-600">{archivedTickets.length}</span>
+          </button>
+        </div>
+      )}
+
       {/* Stage Filter */}
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+      <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
         {['ALL', ...STAGES_ORDER].map(s => {
           const cfg = STAGE_CONFIG[s];
           const isActive = stageFilter === s;
           return (
             <button key={s} onClick={() => setStageFilter(s)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap border transition-all ${
+              className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-2 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold whitespace-nowrap border transition-all duration-200 active:scale-95 ${
                 isActive ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
               }`}>
               {cfg && <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />}
               {s === 'ALL' ? 'الكل' : cfg?.label}
               <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                {s === 'ALL' ? tickets.length : tickets.filter(t => t.stage === s).length}
+                {s === 'ALL' ? currentList.length : currentList.filter(t => t.stage === s).length}
               </span>
             </button>
           );
@@ -132,12 +233,14 @@ export function StaffDashboard() {
 
       {/* Table */}
       {visibleTickets.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-100 p-16 text-center">
-          <Activity className="w-10 h-10 text-slate-200 mx-auto mb-3" />
-          <p className="text-slate-400 font-medium">لا توجد طلبات في هذه المرحلة</p>
+        <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-100 p-10 sm:p-16 text-center">
+          <Activity className="w-8 h-8 sm:w-10 sm:h-10 text-slate-200 mx-auto mb-3" />
+          <p className="text-sm sm:text-base text-slate-400 font-medium">
+            {viewMode === 'archived' ? 'لا توجد طلبات مؤرشفة' : 'لا توجد طلبات في هذه المرحلة'}
+          </p>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[800px]">
               <thead>
@@ -148,8 +251,8 @@ export function StaffDashboard() {
                   <th className="px-4 py-3 text-right">المرحلة</th>
                   <th className="px-4 py-3 text-right">المسؤول</th>
                   <th className="px-4 py-3 text-right">SLA</th>
-                  {canAssign(user?.role || '') && <th className="px-4 py-3 text-right">كلمة المرور</th>}
-                  <th className="px-4 py-3 text-right"></th>
+                  {canAssign(userRole) && <th className="px-4 py-3 text-right">كلمة المرور</th>}
+                  <th className="px-4 py-3 text-right">الإجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -186,7 +289,7 @@ export function StaffDashboard() {
                       <td className="px-4 py-3.5">
                         <SlaBadge breached={ticket.slaBreached} hours={ticket.slaRemainingHours} />
                       </td>
-                      {canAssign(user?.role || '') && (
+                      {canAssign(userRole) && (
                         <td className="px-4 py-3.5">
                           {ticket.storeDetails ? (
                             <button onClick={() => togglePasswordInline(ticket.id)}
@@ -204,10 +307,58 @@ export function StaffDashboard() {
                         </td>
                       )}
                       <td className="px-4 py-3.5">
-                        <button onClick={() => setSelectedTicket(ticket)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity text-indigo-600 font-bold text-xs px-3 py-1.5 bg-indigo-50 rounded-lg hover:bg-indigo-100">
-                          التفاصيل
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          {/* Details button — always visible */}
+                          <button onClick={() => setSelectedTicket(ticket)}
+                            className="text-indigo-600 font-bold text-xs px-3 py-1.5 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors">
+                            التفاصيل
+                          </button>
+
+                          {/* Archive/Unarchive — ADMIN + AM only */}
+                          {canManage(userRole) && (
+                            <button
+                              onClick={() => {
+                                const isArch = ticket.isArchived;
+                                setConfirmModal({
+                                  open: true,
+                                  title: isArch ? 'إلغاء الأرشفة' : 'أرشفة الطلب',
+                                  message: isArch
+                                    ? `هل تريد إعادة الطلب #${ticket.id.slice(0,8)} إلى القائمة النشطة؟`
+                                    : `هل تريد أرشفة الطلب #${ticket.id.slice(0,8)}؟ سيتم نقله إلى أرشيف الطلبات.`,
+                                  danger: false,
+                                  onConfirm: () => { handleArchive(ticket.id); setConfirmModal(m => ({ ...m, open: false })); },
+                                });
+                              }}
+                              className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg transition-colors ${
+                                ticket.isArchived
+                                  ? 'text-blue-600 bg-blue-50 hover:bg-blue-100'
+                                  : 'text-amber-600 bg-amber-50 hover:bg-amber-100'
+                              }`}
+                              title={ticket.isArchived ? 'إلغاء الأرشفة' : 'أرشفة'}
+                            >
+                              {ticket.isArchived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                            </button>
+                          )}
+
+                          {/* Delete — ADMIN + AM only */}
+                          {canManage(userRole) && (
+                            <button
+                              onClick={() => {
+                                setConfirmModal({
+                                  open: true,
+                                  title: 'حذف الطلب نهائياً',
+                                  message: `⚠️ هل أنت متأكد من حذف الطلب #${ticket.id.slice(0,8)} (${ticket.client?.customerName})؟\n\nهذا الإجراء لا يمكن التراجع عنه وسيتم حذف جميع البيانات المرتبطة بالطلب.`,
+                                  danger: true,
+                                  onConfirm: () => { handleDelete(ticket.id); setConfirmModal(m => ({ ...m, open: false })); },
+                                });
+                              }}
+                              className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg text-red-600 bg-red-50 hover:bg-red-100 transition-colors"
+                              title="حذف"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -230,6 +381,16 @@ export function StaffDashboard() {
           onRefresh={fetchData}
         />
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        open={confirmModal.open}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        danger={confirmModal.danger}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal(m => ({ ...m, open: false }))}
+      />
     </div>
   );
 }

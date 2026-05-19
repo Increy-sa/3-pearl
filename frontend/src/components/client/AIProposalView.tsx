@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, CheckCircle2, Edit2, Loader2, Check, Palette, Type, MessageCircle, Target, FileText, Image as ImageIcon, UploadCloud, Phone } from 'lucide-react';
+import { Sparkles, CheckCircle2, Edit2, Loader2, Check, Palette, Type, MessageCircle, Target, FileText, Image as ImageIcon, UploadCloud, Phone, ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
+import { API_URL } from '../../config/api';
 
 interface BrandColor {
   name: string;
@@ -15,19 +16,23 @@ export function AIProposalView({ proposal, legalData, intakeData }: { proposal: 
   const [isEditingName, setIsEditingName] = useState(false);
   const [colors, setColors] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  
+  const [confirmingDashboard, setConfirmingDashboard] = useState(false);
+
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [generatingLogo, setGeneratingLogo] = useState(false);
   const [referenceLogoUrl, setReferenceLogoUrl] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
-  
+
   // Auth state
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authError, setAuthError] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
-  
-  const login = useAuthStore(state => state.login);
+
+  const { login, user, setProfileComplete, token: authToken } = useAuthStore();
   const navigate = useNavigate();
+
+  // Is this an already-authenticated CUSTOMER (came from Adtopia onboarding guard)?
+  const isAuthenticatedCustomer = !!user && user.role === 'CUSTOMER';
 
   useEffect(() => {
     if (proposal) {
@@ -68,7 +73,7 @@ export function AIProposalView({ proposal, legalData, intakeData }: { proposal: 
       });
       const fileData = await base64Promise;
 
-      const response = await fetch('http://localhost:5000/api/upload', {
+      const response = await fetch(`${API_URL}/api/upload`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileName: file.name, fileData })
@@ -93,7 +98,7 @@ export function AIProposalView({ proposal, legalData, intakeData }: { proposal: 
     
     setGeneratingLogo(true);
     try {
-      const response = await fetch('http://localhost:5000/api/ai/generate-logo', {
+      const response = await fetch(`${API_URL}/api/ai/generate-logo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -135,7 +140,7 @@ export function AIProposalView({ proposal, legalData, intakeData }: { proposal: 
         rationale: proposal.rationale
       };
 
-      const response = await fetch('http://localhost:5000/api/tickets/create-final', {
+      const response = await fetch(`${API_URL}/api/tickets/create-final`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(finalData)
@@ -146,7 +151,7 @@ export function AIProposalView({ proposal, legalData, intakeData }: { proposal: 
       if (response.ok) {
         setIsSuccess(true);
         setTimeout(() => {
-          login(data.user, data.token);
+          login(data.user, data.token, true);
           navigate('/dashboard/customer');
         }, 2000);
       } else {
@@ -452,23 +457,75 @@ export function AIProposalView({ proposal, legalData, intakeData }: { proposal: 
       )}
       
       <div className="mt-10 flex flex-col sm:flex-row justify-end items-center gap-4">
-         <a 
-           href="https://wa.me/966500000000" 
-           target="_blank" 
-           rel="noopener noreferrer" 
-           className="w-full sm:w-auto py-3.5 px-6 bg-[#25D366] hover:bg-[#128C7E] text-white rounded-xl font-medium shadow-lg transition-all flex items-center justify-center gap-2"
-         >
-           <Phone className="w-5 h-5" />
-           تواصل مع مستشارك
-         </a>
-         
-         <button 
-           onClick={() => setShowAuthModal(true)}
-           disabled={(!isEditingName && !selectedName) || (isEditingName && !customName)}
-           className="w-full sm:w-auto py-3.5 px-10 bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white rounded-xl font-medium shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-         >
-           اعتماد ومتابعة لإنشاء التذكرة
-         </button>
+
+         {/* ── CUSTOMER PATH: one-click confirm to dashboard ─────────────────── */}
+         {isAuthenticatedCustomer ? (
+           <button
+             onClick={async () => {
+               setConfirmingDashboard(true);
+               const finalName = isEditingName ? customName : selectedName;
+               try {
+                 const token = authToken;
+                 await fetch(`${API_URL}/api/tickets/save-ai-proposal`, {
+                   method: 'POST',
+                   headers: {
+                     'Content-Type': 'application/json',
+                     'Authorization': `Bearer ${token}`,
+                   },
+                   body: JSON.stringify({
+                     selectedName:     finalName,
+                     colorPalette:     colors,
+                     brandVoice:       proposal.brandVoice,
+                     brandVision:      proposal.brandPersonality,
+                     brandDescription: proposal.logoDescription,
+                     slogan:           proposal.slogan,
+                     brandColors:      proposal.brandColors,
+                     typography:       proposal.typography,
+                     rationale:        proposal.rationale,
+                     logoDescription:  proposal.logoDescription,
+                     referenceLogos:   referenceLogoUrl ? [referenceLogoUrl] : [],
+                     generatedLogoUrl: logoUrl,
+                     businessName:     intakeData?.businessName,
+                     industry:         intakeData?.industry,
+                     description:      intakeData?.description,
+                     targetAudience:   intakeData?.targetAudience,
+                   }),
+                 });
+               } catch (err) {
+                 console.error('[save-ai-proposal] failed:', err);
+               }
+               setProfileComplete(true);
+               navigate('/dashboard/customer');
+             }}
+             disabled={confirmingDashboard}
+             className="w-full sm:w-auto py-3.5 px-10 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+           >
+             {confirmingDashboard
+               ? <><Loader2 className="w-5 h-5 animate-spin" /> جاري الحفظ والتحويل...</>
+               : <><ArrowLeft className="w-5 h-5" /> تأكيد والانتقال للوحة التحكم</>}
+           </button>
+         ) : (
+           // ── ANONYMOUS PATH: standard create-final flow ──────────────────────
+           <>
+             <a
+               href="https://wa.me/966500000000"
+               target="_blank"
+               rel="noopener noreferrer"
+               className="w-full sm:w-auto py-3.5 px-6 bg-[#25D366] hover:bg-[#128C7E] text-white rounded-xl font-medium shadow-lg transition-all flex items-center justify-center gap-2"
+             >
+               <Phone className="w-5 h-5" />
+               تواصل مع مستشارك
+             </a>
+
+             <button
+               onClick={() => setShowAuthModal(true)}
+               disabled={(!isEditingName && !selectedName) || (isEditingName && !customName)}
+               className="w-full sm:w-auto py-3.5 px-10 bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white rounded-xl font-medium shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+             >
+               اعتماد ومتابعة لإنشاء التذكرة
+             </button>
+           </>
+         )}
       </div>
     </div>
   );

@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { UserPlus, Trash2, Power, PowerOff, Loader2 } from 'lucide-react';
 
-const API = 'http://localhost:5000';
+import { API_URL } from '../../config/api';
+
+const API = API_URL;
 const ROLE_DISPLAY: Record<string, string> = {
   ADMIN: 'مدير النظام', ACCOUNT_MANAGER: 'مدير حساب', DESIGNER: 'مصمم', DEVELOPER: 'مطوّر', QA: 'مراجع جودة',
 };
@@ -58,22 +60,22 @@ export function ManageStaff() {
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>;
 
   return (
-    <div className="space-y-6" dir="rtl">
-      <div className="flex justify-between items-center">
+    <div className="space-y-4 sm:space-y-6" dir="rtl">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900">إدارة فريق العمل</h1>
-          <p className="text-sm text-slate-500 mt-0.5">{staff.length} عضو مسجّل</p>
+          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900">إدارة فريق العمل</h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">{staff.length} عضو مسجّل</p>
         </div>
-        <button onClick={() => setShowAddModal(true)} className="bg-indigo-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-indigo-700 transition-colors shadow-sm">
+        <button onClick={() => setShowAddModal(true)} className="w-full sm:w-auto bg-indigo-600 text-white px-4 py-3 sm:py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all duration-200 shadow-sm active:scale-95">
           <UserPlus className="w-4 h-4" /> إضافة موظف
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5">
         {staff.map(user => {
           const isLoading = actionLoading === user.id;
           return (
-            <div key={user.id} className={`bg-white p-5 rounded-2xl border shadow-sm transition-all ${user.isActive ? 'border-slate-200' : 'border-red-200 bg-red-50/30 opacity-75'}`}>
+            <div key={user.id} className={`bg-white p-4 sm:p-5 rounded-xl sm:rounded-2xl border shadow-sm transition-all duration-200 ${user.isActive ? 'border-slate-200' : 'border-red-200 bg-red-50/30 opacity-75'}`}>
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="font-bold text-slate-900">{user.name}</h3>
@@ -89,7 +91,7 @@ export function ManageStaff() {
               {/* Action Buttons */}
               <div className="mt-4 flex gap-2">
                 <button onClick={() => toggleStatus(user.id)} disabled={isLoading}
-                  className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold rounded-xl border transition-colors ${
+                  className={`flex-1 flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2.5 sm:py-2 text-[11px] sm:text-xs font-bold rounded-xl border transition-all duration-200 active:scale-95 ${
                     user.isActive
                       ? 'text-red-700 bg-red-50 border-red-200 hover:bg-red-100'
                       : 'text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
@@ -98,7 +100,7 @@ export function ManageStaff() {
                   {user.isActive ? 'تعطيل الحساب' : 'تنشيط الحساب'}
                 </button>
                 <button onClick={() => hardDelete(user.id, user.name)} disabled={isLoading}
-                  className="flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold text-red-600 bg-red-50 border border-red-200 hover:bg-red-100 rounded-xl transition-colors">
+                  className="flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2.5 sm:py-2 text-[11px] sm:text-xs font-bold text-red-600 bg-red-50 border border-red-200 hover:bg-red-100 rounded-xl transition-all duration-200 active:scale-95">
                   <Trash2 className="w-3.5 h-3.5" />
                   حذف نهائي
                 </button>
@@ -110,17 +112,17 @@ export function ManageStaff() {
 
       {/* Add Staff Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowAddModal(false)} />
-          <form onSubmit={handleAdd} className="relative bg-white rounded-3xl p-8 w-full max-w-md space-y-4 shadow-2xl">
-            <h3 className="text-xl font-bold text-slate-900">إضافة عضو جديد</h3>
-            <input required placeholder="الاسم" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-            <input required type="email" placeholder="البريد الإلكتروني" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-            <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} className="w-full p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300">
+          <form onSubmit={handleAdd} className="relative bg-white rounded-2xl sm:rounded-3xl p-6 sm:p-8 w-full max-w-md space-y-3 sm:space-y-4 shadow-2xl">
+            <h3 className="text-lg sm:text-xl font-bold text-slate-900">إضافة عضو جديد</h3>
+            <input required placeholder="الاسم" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 text-sm transition-all duration-200" />
+            <input required type="email" placeholder="البريد الإلكتروني" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 text-sm transition-all duration-200" />
+            <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} className="w-full p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 text-sm transition-all duration-200">
               {ROLES.map(r => <option key={r} value={r}>{ROLE_DISPLAY[r]}</option>)}
             </select>
-            <input required type="password" placeholder="كلمة المرور" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-            <button type="submit" className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors">إضافة</button>
+            <input required type="password" placeholder="كلمة المرور" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 text-sm transition-all duration-200" />
+            <button type="submit" className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all duration-200 active:scale-[0.98]">إضافة</button>
           </form>
         </div>
       )}

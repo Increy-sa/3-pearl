@@ -3,7 +3,9 @@ import { AlertTriangle, BarChart3, CheckCircle2, FileText, Loader2 } from 'lucid
 import { useAuthStore } from '../../store/useAuthStore';
 import { Navigate } from 'react-router-dom';
 
-const API = 'http://localhost:5000';
+import { API_URL } from '../../config/api';
+
+const API = API_URL;
 
 type ReportsResponse = {
   totalTickets: number;
@@ -62,22 +64,22 @@ export function ReportsDashboard() {
   ];
 
   return (
-    <div className="space-y-6" dir="rtl">
+    <div className="space-y-4 sm:space-y-6" dir="rtl">
       <div>
-        <h1 className="text-2xl font-extrabold text-slate-900">التقارير والتحليلات</h1>
-        <p className="text-sm text-slate-500 mt-1">لوحة تحكم المدير لمتابعة الأداء العام والفريق.</p>
+        <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900">التقارير والتحليلات</h1>
+        <p className="text-xs sm:text-sm text-slate-500 mt-1">لوحة تحكم المدير لمتابعة الأداء العام والفريق.</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
         {statCards.map((card) => (
-          <div key={card.title} className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+          <div key={card.title} className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-sm hover:shadow-md transition-all duration-200">
             <div className="flex items-center justify-between">
               <p className="text-sm text-slate-500">{card.title}</p>
               <div className={`p-2 rounded-lg ${card.style}`}>
                 <card.icon className="w-4 h-4" />
               </div>
             </div>
-            <p className="text-3xl font-extrabold text-slate-900 mt-3">{card.value}</p>
+            <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-2 sm:mt-3">{card.value}</p>
           </div>
         ))}
       </div>

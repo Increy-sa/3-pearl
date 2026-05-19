@@ -15,6 +15,8 @@ import { encrypt, decrypt, validateEncryptionKey } from './utils/crypto';
 import { STAGES, STAGE_LABELS, SLA_HOURS, isValidTransition, isSlaBreached, getSlaRemainingHours } from './config/stages';
 import { STAGE_CHECKLISTS, areChecklistItemsComplete, getRoleForStage } from './config/workflow';
 import staffRoutes from './routes/staffRoutes';
+import webhookRoutes from './routes/webhookRoutes';
+import { validateLoginBody, validateOnboardingBody, validateLegalBody } from './utils/validators';
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -29,7 +31,14 @@ const getGenAI = () => {
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-for-development';
 const prisma = new PrismaClient();
 
-app.use(cors());
+// CORS: read allowed origin from env, fallback to localhost for dev
+const corsOptions = {
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+};
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -40,13 +49,17 @@ app.use('/uploads', express.static(uploadsDir));
 // Staff Operations API
 app.use('/api/staff', staffRoutes);
 
+// Third-Party Webhooks
+app.use('/api/webhooks', webhookRoutes);
+
 app.post('/api/upload', async (req, res) => {
   try {
     const { fileName, fileData } = req.body;
     const base64Data = fileData.replace(/^data:.*?;base64,/, "");
     const finalFileName = `${Date.now()}-${fileName.replace(/\s+/g, '_')}`;
     fs.writeFileSync(path.join(uploadsDir, finalFileName), base64Data, 'base64');
-    res.json({ url: `http://localhost:5000/uploads/${finalFileName}` });
+    const baseUrl = process.env.BASE_URL || `http://localhost:${port}`;
+    res.json({ url: `${baseUrl}/uploads/${finalFileName}` });
   } catch (e) { res.status(500).json({ error: 'Upload failed' }); }
 });
 
@@ -88,14 +101,21 @@ app.post('/api/ai/generate-logo', async (req, res) => {
 // Full Brand Identity Generation (called by ClientIntakeForm)
 app.post('/api/tickets/create-with-ai', async (req, res) => {
   try {
-    const { businessName, industry, description, targetAudience } = req.body;
+    const { businessName, industry, description, targetAudience, email } = req.body;
+
+    // ── Input Validation ──────────────────────────────────────────────────────
+    const validation = validateOnboardingBody(req.body);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.errors[0], errors: validation.errors });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     if (!businessName || !industry) {
       return res.status(400).json({ error: 'اسم النشاط ومجال العمل مطلوبان' });
     }
 
     console.log(`[create-with-ai] Generating full brand identity for: ${businessName} (${industry})`);
-    
+
     const identity = await generateFullBrandIdentity(
       businessName,
       industry,
@@ -103,17 +123,87 @@ app.post('/api/tickets/create-with-ai', async (req, res) => {
       targetAudience || 'الجميع'
     );
 
-    // Build the suggestedNames array from suggestedName + alternativeNames
+    // ── Persist ClientInfo — store ALL form data (legal + store) ─────────────
+    // ClientIntakeForm spreads legalData into the request body, so every field
+    // the customer filled in LegalInfoForm is available here. Save all of it so
+    // the customer dashboard shows uploaded documents and legal status correctly.
+    if (email) {
+      const existing = await prisma.clientInfo.findFirst({ where: { email } });
+
+      const allFormData: Record<string, any> = {
+        // Store / brand fields
+        businessName,
+        industry,
+        description:    description    || '',
+        targetAudience: targetAudience || 'الجميع',
+
+        // Legal / identity fields (from LegalInfoForm via legalData spread)
+        customerName:    req.body.customerName    || undefined,
+        phone:           req.body.phone           || undefined,
+        nationalId:      req.body.nationalId      || undefined,
+        iban:            req.body.iban            || undefined,
+        hasDocument:     req.body.hasDocument     ?? undefined,
+        hasLegalDoc:     req.body.hasLegalDoc     ?? undefined,
+        documentFileUrl: req.body.documentFileUrl || undefined,  // "yes" branch — uploaded file
+        nationalIdUrl:   req.body.nationalIdUrl   || undefined,  // "no" branch — ID photo
+        fullNameInId:    req.body.fullNameInId    || undefined,
+        absherPhone:     req.body.absherPhone     || undefined,
+
+      };
+
+      // Strip undefined so Prisma doesn't overwrite existing values with null
+      const cleanData = Object.fromEntries(
+        Object.entries(allFormData).filter(([, v]) => v !== undefined)
+      );
+
+      let clientInfoId: string;
+      if (existing) {
+        await prisma.clientInfo.update({ where: { id: existing.id }, data: cleanData });
+        clientInfoId = existing.id;
+      } else {
+        // Required fields must be explicit for Prisma's type checker
+        const created = await prisma.clientInfo.create({
+          data: {
+            customerName:  (cleanData.customerName  as string) || '',
+            email:         email as string,
+            businessName:  (cleanData.businessName  as string) || businessName,
+            industry:      (cleanData.industry      as string) || industry,
+            description:   (cleanData.description   as string) || '',
+            targetAudience:(cleanData.targetAudience as string) || 'الجميع',
+            ...cleanData,
+          },
+        });
+        clientInfoId = created.id;
+      }
+
+      // ── Re-link ticket so dashboard always reads the updated ClientInfo ─────
+      // The Adtopia webhook may have created a separate ClientInfo and linked the
+      // ticket to it. Update the ticket's clientId to point to this record so
+      // the dashboard's /api/customer/my-ticket returns the correct client data.
+      const user = await prisma.user.findUnique({ where: { email: email as string } });
+      if (user) {
+        await prisma.ticket.updateMany({
+          where: { customerId: user.id },
+          data:  { clientId: clientInfoId },
+        });
+        console.log(`[create-with-ai] Ticket(s) re-linked to ClientInfo ${clientInfoId} for user ${user.id}`);
+      }
+      // ─────────────────────────────────────────────────────────────────────────
+
+      console.log(`[create-with-ai] ClientInfo persisted for ${email}`, Object.keys(cleanData));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+
+
     const suggestedNames: string[] = [];
     if (identity.suggestedName) suggestedNames.push(identity.suggestedName);
     if (identity.alternativeNames && Array.isArray(identity.alternativeNames)) {
       suggestedNames.push(...identity.alternativeNames);
     }
 
-    // Extract color hex values for the colorPalette array
     const colorPalette = (identity.brandColors || []).map((c: any) => c.hex);
 
-    // Return in the shape the frontend expects
     res.json({
       aiProposal: {
         suggestedNames,
@@ -138,10 +228,18 @@ app.post('/api/tickets/create-final', async (req, res) => {
   try {
     const data = req.body;
 
+    // ── Input Validation ──────────────────────────────────────────────────────
+    const validation = validateLegalBody(data);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.errors[0], errors: validation.errors });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     // Validate required fields
     if (!data.customerName || !data.email || !data.businessName || !data.industry) {
       return res.status(400).json({ error: 'Missing required fields: customerName, email, businessName, industry' });
     }
+
 
     // Create or reuse user (handle duplicate email gracefully)
     let user = await prisma.user.findUnique({ where: { email: data.email } });
@@ -152,6 +250,16 @@ app.post('/api/tickets/create-final', async (req, res) => {
     }
 
     // Create client info record
+    // Smart detection: if frontend sent needsLegalExtraction use it,
+    // otherwise infer: has ID/absher data but no document → needs extraction
+    const hasDocFile = !!(data.documentFileUrl || data.legalDocUrl);
+    const hasExtractionData = !!(data.nationalIdUrl || data.fullNameInId || data.absherPhone);
+    const inferredNeedsExtraction = !hasDocFile && hasExtractionData;
+    const finalNeedsExtraction = data.needsLegalExtraction === true || inferredNeedsExtraction;
+    const finalHasLegalDoc = data.hasLegalDoc === true || data.hasDocument === true || hasDocFile;
+
+    console.log('[create-final] RESOLVED:', { finalNeedsExtraction, finalHasLegalDoc, hasDocFile, hasExtractionData });
+
     const client = await prisma.clientInfo.create({ data: {
       customerName: data.customerName,
       businessName: data.businessName,
@@ -162,13 +270,18 @@ app.post('/api/tickets/create-final', async (req, res) => {
       phone: data.phone || null,
       nationalId: data.nationalId || null,
       iban: data.iban || null,
-      hasLegalDoc: data.hasLegalDoc ?? true,
-      documentFileUrl: data.legalDocUrl || null,
-      legalDocUrl: data.legalDocUrl || null,
+      hasLegalDoc: finalHasLegalDoc,
+      hasDocument: data.hasDocument === true || hasDocFile,
+      needsLegalExtraction: finalNeedsExtraction,
+      documentFileUrl: data.documentFileUrl || data.legalDocUrl || null,
+      legalDocUrl: data.documentFileUrl || data.legalDocUrl || null,
       nationalIdUrl: data.nationalIdUrl || null,
       fullNameInId: data.fullNameInId || null,
-      absherPhone: data.absherPhone || null
+      absherPhone: data.absherPhone || null,
+      docsApproved: false,
     }});
+
+
 
     // Create ticket with AI proposal
     const ticket = await prisma.ticket.create({ data: {
@@ -206,14 +319,126 @@ app.post('/api/tickets/create-final', async (req, res) => {
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+// ════════════════════════════════════════════════════════════════
+// POST /api/auth/verify-email — Step 1: Check if user exists + role
+// ════════════════════════════════════════════════════════════════
+app.post('/api/auth/verify-email', async (req, res) => {
   const { email } = req.body;
-  const user = await prisma.user.findUnique({ where: { email } });
+  if (!email || typeof email !== 'string') {
+    return res.status(400).json({ error: 'البريد الإلكتروني مطلوب' });
+  }
+
+  const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+  if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
+  if (user.isActive === false) return res.status(403).json({ error: 'الحساب معطل من قبل الإدارة' });
+
+  const isStaff = ['ADMIN', 'ACCOUNT_MANAGER', 'DESIGNER', 'DEVELOPER', 'QA'].includes(user.role);
+  const hasPassword = !!user.passwordHash;
+
+  res.json({
+    exists: true,
+    role: user.role,
+    requiresPassword: isStaff && hasPassword,
+    name: user.name,
+  });
+});
+
+// ════════════════════════════════════════════════════════════════
+// POST /api/auth/login — Step 2: Complete login (with optional password)
+// ════════════════════════════════════════════════════════════════
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  // ── Input Validation ────────────────────────────────────────────────────────
+  const validation = validateLoginBody(req.body);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.errors[0] });
+  }
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const user = await prisma.user.findUnique({ where: { email: email?.trim()?.toLowerCase() } });
   if (!user) return res.status(404).json({ error: 'User not found' });
   if (user.isActive === false) return res.status(403).json({ error: 'الحساب معطل من قبل الإدارة' });
+
+  // ── Password verification for staff roles ─────────────────────────────────
+  const isStaff = ['ADMIN', 'ACCOUNT_MANAGER', 'DESIGNER', 'DEVELOPER', 'QA'].includes(user.role);
+  if (isStaff && user.passwordHash) {
+    if (!password) {
+      return res.status(401).json({ error: 'كلمة المرور مطلوبة' });
+    }
+    const isValid = await bcrypt.compare(password, user.passwordHash);
+    if (!isValid) {
+      return res.status(401).json({ error: 'كلمة المرور غير صحيحة' });
+    }
+  }
+  // ───────────────────────────────────────────────────────────────────────────
+
+  // ── Onboarding Guard ──────────────────────────────────────────────────────
+  let isProfileComplete = true;
+  let customerPhone: string | null = null;
+  if (user.role === 'CUSTOMER') {
+    const clientInfo = await prisma.clientInfo.findFirst({
+      where: {
+        email: user.email,
+        NOT: { industry: 'غير محدد' },
+      },
+    });
+    isProfileComplete = !!clientInfo;
+    const anyClientInfo = clientInfo ?? await prisma.clientInfo.findFirst({ where: { email: user.email } });
+    customerPhone = anyClientInfo?.phone ?? null;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
-  res.json({ token, user: { id: user.id, email: user.email, role: user.role, name: user.name } });
+  res.json({
+    token,
+    isProfileComplete,
+    user: { id: user.id, email: user.email, role: user.role, name: user.name, phone: customerPhone },
+  });
+
 });
+
+// ════════════════════════════════════════════════════════════════
+// PUT /api/auth/change-password — Change password (authenticated)
+// ════════════════════════════════════════════════════════════════
+app.put('/api/auth/change-password', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
+    const userId = req.user!.userId;
+
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ error: 'كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
+
+    // If user already has a password, verify old password
+    if (user.passwordHash) {
+      if (!oldPassword) {
+        return res.status(400).json({ error: 'كلمة المرور الحالية مطلوبة' });
+      }
+      const isValid = await bcrypt.compare(oldPassword, user.passwordHash);
+      if (!isValid) {
+        return res.status(401).json({ error: 'كلمة المرور الحالية غير صحيحة' });
+      }
+    }
+
+    // Hash and save new password
+    const hash = await bcrypt.hash(newPassword, 12);
+    await prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: hash },
+    });
+
+    res.json({ success: true, message: 'تم تغيير كلمة المرور بنجاح' });
+  } catch (e: any) {
+    console.error('[change-password] Error:', e.message);
+    res.status(500).json({ error: 'فشل تغيير كلمة المرور' });
+  }
+});
+
+
 
 app.get('/api/customer/my-ticket', authenticateToken, async (req: AuthRequest, res) => {
   const ticket = await prisma.ticket.findFirst({
@@ -608,8 +833,8 @@ app.get('/api/tickets', authenticateToken, async (req: AuthRequest, res) => {
 });
 
 app.put('/api/tickets/:id/stage', authenticateToken, async (req: AuthRequest, res) => {
-  const { id } = req.params;
-  const { stage } = req.body;
+  const id = req.params['id'] as string;
+  const stage = req.body['stage'] as string;
   const ticket = await prisma.ticket.findUnique({ where: { id } });
   if (!ticket) return res.status(404).json({ error: 'Not found' });
 
@@ -620,15 +845,17 @@ app.put('/api/tickets/:id/stage', authenticateToken, async (req: AuthRequest, re
 
   if (ticket.stage === 'LEGAL_PROCESSING' && stage !== 'INTAKE' && stage !== 'LEGAL_PROCESSING') {
     const fullTicket = await prisma.ticket.findUnique({
-      where: { id },
+      where: { id: id },
       include: { client: true, storeDetails: true }
     });
-    const hasDoc = fullTicket?.client?.documentFileUrl || fullTicket?.client?.legalDocUrl;
+    const clientData = (fullTicket as any)?.client;
+    const storeData = (fullTicket as any)?.storeDetails;
+    const hasDoc = clientData?.documentFileUrl || clientData?.legalDocUrl;
     
     const missing = [];
     if (!hasDoc) missing.push('وثيقة العمل الحر');
-    if (!fullTicket?.storeDetails?.domainName) missing.push('اسم الدومين');
-    if (!fullTicket?.storeDetails?.sallaStoreUrl) missing.push('رابط متجر سلة / زد');
+    if (!storeData?.domainName) missing.push('اسم الدومين');
+    if (!storeData?.sallaStoreUrl) missing.push('رابط متجر سلة / زد');
     
     if (missing.length > 0) {
       return res.status(400).json({ error: `يرجى (حفظ البيانات القانونية) والتأكد من تعبئة: ${missing.join('، ')}` });
@@ -678,7 +905,7 @@ app.put('/api/tickets/:id/stage', authenticateToken, async (req: AuthRequest, re
   const targetRole = getRoleForStage(stage);
   if (targetRole) {
     await prisma.notification.create({ data: {
-      role: targetRole, ticketId: id, title: 'New Task',
+      role: targetRole as string, ticketId: id, title: 'New Task',
       message: `Ticket moved to ${stage}`, isPriority: true
     }});
   }
@@ -686,7 +913,7 @@ app.put('/api/tickets/:id/stage', authenticateToken, async (req: AuthRequest, re
 });
 
 app.put('/api/tickets/:id/assign', authenticateToken, async (req: AuthRequest, res) => {
-  const { id } = req.params;
+  const id = req.params['id'] as string;
   const { accountManagerId, designerId, developerId } = req.body;
   const updated = await prisma.ticket.update({
     where: { id },
@@ -701,7 +928,7 @@ app.get('/api/staff', authenticateToken, async (req: AuthRequest, res) => {
 });
 
 app.put('/api/tickets/:id/checklist', authenticateToken, async (req: AuthRequest, res) => {
-  const { id } = req.params;
+  const id = req.params['id'] as string;
   const { checklist } = req.body;
   const updated = await prisma.ticket.update({ where: { id }, data: { checklists: JSON.stringify(checklist) } });
   res.json(updated);
@@ -732,7 +959,94 @@ app.post('/api/admin/staff', authenticateToken, async (req: AuthRequest, res) =>
   res.json(user);
 });
 
+// ── Save AI Proposal for authenticated customers ───────────────────────────────
+// Called when an already-logged-in customer confirms the AI proposal.
+// Updates (or creates) the aiProposal linked to their ticket so the dashboard
+// can display the full brand identity: colors, slogan, brandVoice, etc.
+app.post('/api/tickets/save-ai-proposal', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { userId } = req.user!;
+    const {
+      selectedName,
+      colorPalette,
+      brandVoice,
+      brandVision,
+      brandDescription,
+      slogan,
+      brandColors,
+      typography,
+      rationale,
+      logoDescription,
+      referenceLogos,
+      generatedLogoUrl,
+      // intake fields
+      businessName,
+      industry,
+      description,
+      targetAudience,
+    } = req.body;
+
+    // Find the customer's ticket
+    const ticket = await prisma.ticket.findFirst({
+      where: { customerId: userId },
+      include: { aiProposal: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ error: 'لم يتم العثور على طلب مرتبط بحسابك' });
+    }
+
+    const proposalData = {
+      businessName:     selectedName || businessName || '',
+      selectedName:     selectedName || businessName || '',
+      industry:         industry || '',
+      brandVoice:       brandVoice || '',
+      brandVision:      brandVision || slogan || '',
+      brandDescription: brandDescription || logoDescription || description || '',
+      selectedColors:   JSON.stringify(colorPalette || []),
+      referenceLogos:   JSON.stringify(referenceLogos || []),
+      generatedLogoUrl: generatedLogoUrl || null,
+      suggestedNames:   JSON.stringify([selectedName].filter(Boolean)),
+    };
+
+    if (ticket.aiProposal) {
+      // Update existing aiProposal
+      await prisma.aIProposal.update({
+        where: { id: ticket.aiProposal.id },
+        data: proposalData,
+      });
+    } else {
+      // Create new aiProposal linked to the ticket
+      await prisma.aIProposal.create({
+        data: { ...proposalData, ticketId: ticket.id },
+      });
+    }
+
+    // Also update ClientInfo with latest intake data
+    const clientInfo = await prisma.clientInfo.findFirst({ where: { id: ticket.clientId || '' } });
+    if (clientInfo) {
+      await prisma.clientInfo.update({
+        where: { id: clientInfo.id },
+        data: {
+          ...(businessName  && { businessName }),
+          ...(industry      && { industry }),
+          ...(description   && { description }),
+          ...(targetAudience && { targetAudience }),
+        },
+      });
+    }
+
+    console.log(`[save-ai-proposal] Saved for userId=${userId}, ticketId=${ticket.id}`);
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('[save-ai-proposal] Error:', error.message);
+    res.status(500).json({ error: error.message || 'فشل حفظ بيانات الهوية' });
+  }
+});
+
 async function start() {
+
   validateEncryptionKey();
   await prisma.$connect();
   app.listen(port, () => console.log(`Server on ${port}`));

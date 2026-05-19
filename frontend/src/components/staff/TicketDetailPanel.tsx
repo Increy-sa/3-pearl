@@ -6,7 +6,9 @@ import {
   Timer, AlertCircle, Send, CheckCircle2, Users, ArrowRight
 } from 'lucide-react';
 
-const API = 'http://localhost:5000';
+import { API_URL } from '../../config/api';
+
+const API = API_URL;
 
 const STAGE_CONFIG: Record<string, { label: string; color: string; bg: string; dot: string }> = {
   INTAKE:                   { label: 'استلام الطلب',           color: 'text-sky-700',      bg: 'bg-sky-50 border-sky-200',         dot: 'bg-sky-500' },
@@ -123,6 +125,10 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
   const [isAmReviewing, setIsAmReviewing]     = useState(false);
   const [amReviewError, setAmReviewError]     = useState<string | null>(null);
   const [amReviewSuccess, setAmReviewSuccess] = useState<string | null>(null);
+
+  // Document approval state (ADMIN / ACCOUNT_MANAGER only)
+  const [isApprovingDocs, setIsApprovingDocs] = useState(false);
+  const [docsApproved, setDocsApproved]       = useState<boolean>(ticket.client?.docsApproved ?? false);
 
   useEffect(() => {
     try { setChecklist(JSON.parse(ticket.checklists || '[]')); } catch { setChecklist([]); }
@@ -445,7 +451,29 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
     }
   };
 
+  // ── Approve extraction documents (ADMIN / AM only) ──────────────────────
+  const approveDocuments = async () => {
+    setIsApprovingDocs(true);
+    try {
+      const res = await fetch(`${API}/api/staff/tickets/${ticket.id}/approve-docs`, {
+        method: 'PUT', headers,
+      });
+      if (res.ok) {
+        setDocsApproved(true);
+        onRefresh();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setErrorModal(err.error || 'فشل اعتماد الوثائق');
+      }
+    } catch {
+      setErrorModal('تعذر الاتصال بالخادم');
+    } finally {
+      setIsApprovingDocs(false);
+    }
+  };
+
   const isAssignedToMe =
+
     ticket.accountManagerId === userId ||
     ticket.designerId === userId ||
     ticket.developerId === userId ||
@@ -492,12 +520,12 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
       )}
 
       <div className="fixed inset-0 z-50 flex" dir="rtl">
-        <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-        <div className="w-full max-w-2xl bg-white h-full overflow-y-auto shadow-2xl flex flex-col font-sans relative">
+        <div className="hidden sm:block flex-1 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+        <div className="w-full sm:max-w-xl lg:max-w-2xl bg-white h-full overflow-y-auto shadow-2xl flex flex-col font-sans relative">
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-slate-100 px-6 py-4 flex items-center justify-between">
-          <div>
-            <h2 className="font-extrabold text-slate-900 text-lg">{ticket.client?.customerName}</h2>
+        <div className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-slate-100 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+          <div className="min-w-0 flex-1">
+            <h2 className="font-extrabold text-slate-900 text-base sm:text-lg truncate">{ticket.client?.customerName}</h2>
             <p className="text-[10px] text-slate-400 mt-0.5">أُنشئ: {fmtDate(ticket.createdAt)}</p>
             <div className="flex items-center gap-2 mt-1">
               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${cfg.bg} ${cfg.color}`}>
@@ -511,10 +539,10 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
               )}
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-xl"><X className="w-5 h-5 text-slate-500" /></button>
+          <button onClick={onClose} className="p-2.5 sm:p-2 hover:bg-slate-100 rounded-xl transition-colors shrink-0"><X className="w-5 h-5 text-slate-500" /></button>
         </div>
 
-        <div className="p-6 space-y-6 flex-1">
+        <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 flex-1">
           {/* SLA */}
           <div className={`p-4 rounded-2xl border flex items-center gap-3 ${ticket.slaBreached ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-100'}`}>
             {ticket.slaBreached ? <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" /> : <Clock className="w-5 h-5 text-slate-400 shrink-0" />}
@@ -991,16 +1019,18 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
             </section>
           )}
 
-          {/* Client Info */}
+
+          {/* ── Client Info + Legal Documents ─────────────────────── */}
           <section className="space-y-3">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">بيانات العميل</h3>
             <div className="bg-slate-50 rounded-2xl border border-slate-100 divide-y divide-slate-100">
               {[
-                { icon: User, label: 'الاسم', value: ticket.client?.customerName },
-                { icon: Mail, label: 'البريد', value: ticket.client?.email },
-                { icon: Phone, label: 'الجوال', value: ticket.client?.phone },
-                { icon: CreditCard, label: 'الهوية', value: ticket.client?.nationalId },
-                { icon: Palette, label: 'المجال', value: ticket.client?.industry },
+                { icon: User,       label: 'الاسم',    value: ticket.client?.customerName },
+                { icon: Mail,       label: 'البريد',   value: ticket.client?.email },
+                { icon: Phone,      label: 'الجوال',   value: ticket.client?.phone },
+                { icon: CreditCard, label: 'الهوية',   value: ticket.client?.nationalId },
+                { icon: CreditCard, label: 'الآيبان',  value: ticket.client?.iban },
+                { icon: Palette,    label: 'المجال',   value: ticket.client?.industry },
               ].map(({ icon: Icon, label, value }) => (
                 <div key={label} className="flex items-center gap-3 px-4 py-3">
                   <Icon className="w-4 h-4 shrink-0 text-slate-400" />
@@ -1010,6 +1040,95 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
               ))}
             </div>
           </section>
+
+          {/* ── Legal Documents Section (ADMIN + AM only) ────────── */}
+          {['ADMIN', 'ACCOUNT_MANAGER'].includes(userRole) && (() => {
+            const c = ticket.client;
+            if (!c) return null;
+
+            // Smart detection: even if needsLegalExtraction wasn't saved correctly,
+            // if client has nationalIdUrl or fullNameInId, they need extraction
+            const hasExtractionData = !!(c.nationalIdUrl || c.fullNameInId || c.absherPhone);
+            const needsExtract = c.needsLegalExtraction === true || (hasExtractionData && !c.hasLegalDoc);
+            const hasDoc       = c.hasLegalDoc === true || c.hasDocument === true;
+            const docUrl       = c.legalDocUrl || c.documentFileUrl;
+            const idUrl        = c.nationalIdUrl;
+            const approved     = docsApproved || c.docsApproved;
+
+            // Don't show section if there's nothing to display
+            if (!needsExtract && !docUrl) return null;
+
+            return (
+              <section className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">الوثائق القانونية</h3>
+                  {needsExtract && (
+                    approved
+                      ? <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full"><CheckCircle2 className="w-3 h-3" /> تم الاعتماد</span>
+                      : <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full"><Clock className="w-3 h-3" /> قيد المراجعة</span>
+                  )}
+                </div>
+
+                {/* Has legal doc → show link */}
+                {hasDoc && docUrl && (
+                  <a href={docUrl} target="_blank" rel="noreferrer"
+                    className="flex items-center gap-3 p-3 bg-blue-50 rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors">
+                    <FileText className="w-5 h-5 text-blue-600 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-blue-800">الوثيقة / السجل التجاري</p>
+                      <p className="text-[10px] text-blue-500 truncate">{docUrl}</p>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-blue-400 shrink-0" />
+                  </a>
+                )}
+
+                {/* Needs extraction → show extraction fields */}
+                {needsExtract && (
+                  <div className="bg-amber-50 rounded-xl border border-amber-200 p-4 space-y-3">
+                    <p className="text-xs font-bold text-amber-700">⚠️ العميل يحتاج استخراج وثيقة — البيانات المقدَّمة:</p>
+                    {[
+                      { label: 'الاسم في الهوية', value: c.fullNameInId },
+                      { label: 'جوال أبشر',       value: c.absherPhone },
+                    ].map(({ label, value }) => value ? (
+                      <div key={label} className="flex items-center gap-3">
+                        <span className="text-[10px] text-amber-600 w-28 shrink-0">{label}</span>
+                        <span className="text-xs font-semibold text-amber-900">{value}</span>
+                      </div>
+                    ) : null)}
+
+                    {idUrl && (
+                      <a href={idUrl} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-2 p-2 bg-white rounded-lg border border-amber-200 hover:bg-amber-50 transition-colors mt-1">
+                        <FileText className="w-4 h-4 text-amber-600 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-amber-800">صورة الهوية المرفوعة</p>
+                          <p className="text-[10px] text-amber-500 truncate">{idUrl}</p>
+                        </div>
+                        <ExternalLink className="w-3.5 h-3.5 text-amber-400" />
+                      </a>
+                    )}
+
+                    {/* Approve Docs Button */}
+                    {!approved && (
+                      <button
+                        onClick={approveDocuments}
+                        disabled={isApprovingDocs}
+                        className="w-full mt-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        {isApprovingDocs ? 'جاري الاعتماد...' : 'اعتماد الوثائق والموافقة عليها'}
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Has doc, not extraction */}
+                {!needsExtract && !docUrl && (
+                  <p className="text-xs text-slate-400 italic">لا توجد وثائق مرفوعة حتى الآن.</p>
+                )}
+              </section>
+            );
+          })()}
 
           {/* Brand Identity — Task 3: Full display */}
           {ticket.aiProposal && (

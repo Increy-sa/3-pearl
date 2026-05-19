@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import { Send, Loader2 } from 'lucide-react';
+import { useAuthStore } from '../../store/useAuthStore';
+import { API_URL } from '../../config/api';
 
 export function ClientIntakeForm({ onProposalGenerated, legalData, onBack }: {
-  onProposalGenerated: (data: any) => void;
+  onProposalGenerated: (data: any, intake: any) => void;
   legalData: any;
   onBack: () => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [industry, setIndustry] = useState('');
+
+  useAuthStore();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,13 +32,23 @@ export function ClientIntakeForm({ onProposalGenerated, legalData, onBack }: {
     };
 
     try {
-      const response = await fetch('http://localhost:5000/api/tickets/create-with-ai', {
+      const response = await fetch(`${API_URL}/api/tickets/create-with-ai`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
 
       const result = await response.json();
+
+      if (!response.ok) {
+        const errMsg = result.error || result.errors?.join('\n') || 'خطأ غير معروف';
+        console.error('[create-with-ai] Server error:', result);
+        alert(`خطأ من الخادم (${response.status}):\n${errMsg}`);
+        return;
+      }
+
+      // Always let onProposalGenerated fire so the user can review the AI results
+      // before being redirected. The confirm button in AIProposalView handles the final step.
       onProposalGenerated(result.aiProposal, data);
     } catch (error) {
       console.error("Failed to generate AI proposal:", error);
@@ -43,6 +57,7 @@ export function ClientIntakeForm({ onProposalGenerated, legalData, onBack }: {
       setLoading(false);
     }
   };
+
 
   return (
     <div className="w-full">

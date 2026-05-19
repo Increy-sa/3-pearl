@@ -1,9 +1,23 @@
 @import "tailwindcss";
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
   body {
     @apply bg-slate-50 text-slate-900 antialiased;
     font-family: 'Cairo', sans-serif;
+  }
+  /* Touch-friendly inputs */
+  input, select, textarea, button {
+    @apply outline-none;
+    -webkit-appearance: none;
+    touch-action: manipulation;
+  }
+  /* Focus-visible ring for keyboard nav */
+  input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible {
+    @apply ring-2 ring-indigo-400 ring-offset-1;
   }
 }
 
@@ -14,5 +28,20 @@
   }
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
+  }
+  /* Thin styled scrollbar for panels */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
   }
 }

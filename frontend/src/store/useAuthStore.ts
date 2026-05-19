@@ -9,12 +9,16 @@ interface User {
   name: string;
   email: string;
   role: Role;
+  phone?: string | null;  // from Adtopia webhook via login response
 }
+
 
 interface AuthState {
   user: User | null;
   token: string | null;
-  login: (user: User, token: string) => void;
+  isProfileComplete: boolean;
+  login: (user: User, token: string, isProfileComplete: boolean) => void;
+  setProfileComplete: (value: boolean) => void;
   logout: () => void;
 }
 
@@ -23,8 +27,10 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       user: null,
       token: null,
-      login: (user, token) => set({ user, token }),
-      logout: () => set({ user: null, token: null }),
+      isProfileComplete: true, // safe default — guard only activates for CUSTOMER role
+      login: (user, token, isProfileComplete) => set({ user, token, isProfileComplete }),
+      setProfileComplete: (value) => set({ isProfileComplete: value }),
+      logout: () => set({ user: null, token: null, isProfileComplete: true }),
     }),
     {
       name: 'auth-storage',

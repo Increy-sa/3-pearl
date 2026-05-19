@@ -1,4 +1,3 @@
-import React from 'react';
 import { Clock, CheckCircle, PenTool, Code, UserCircle, FileCheck, FileWarning } from 'lucide-react';
 
 const statusConfig: Record<string, { label: string, color: string, icon: any }> = {
@@ -21,7 +20,6 @@ export function TicketCard({ ticket }: { ticket: any }) {
   ].filter(Boolean);
 
   // Legal document status
-  const hasLegalDoc = ticket.client?.hasLegalDoc !== false;
   const needsIssuance = ticket.client?.hasLegalDoc === false;
 
   return (

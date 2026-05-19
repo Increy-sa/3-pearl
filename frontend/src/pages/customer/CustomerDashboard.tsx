@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { 
   Loader2, CheckCircle2, Clock, Palette, Type, Globe,
@@ -7,6 +7,7 @@ import {
   IdCard, Smartphone, ThumbsUp, PenLine, AlertCircle, CheckCircle, Send
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { API_URL } from '../../config/api';
 
 const STEPS = [
   { id: 'INTAKE',           label: 'استلام الطلب' },
@@ -61,9 +62,13 @@ export function CustomerDashboard() {
       return;
     }
 
+    // Reset on every mount/user-change so redirected users don't see a blank screen
+    setTicket(null);
+    setLoading(true);
+
     const fetchTicket = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/customer/my-ticket', {
+        const response = await fetch(`${API_URL}/api/customer/my-ticket`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (response.ok) {
@@ -80,7 +85,8 @@ export function CustomerDashboard() {
     };
 
     fetchTicket();
-  }, [token, navigate, logout]);
+  }, [token, user?.id, navigate, logout]); // user.id ensures refetch when user session changes
+
 
   const handleApproval = async () => {
     if (!approvalAction || !ticket) return;
@@ -91,7 +97,7 @@ export function CustomerDashboard() {
     setApprovalLoading(true);
     setApprovalError(null);
     try {
-      const res = await fetch('http://localhost:5000/api/customer/approve-design', {
+      const res = await fetch(`${API_URL}/api/customer/approve-design`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ ticketId: ticket.id, action: approvalAction, feedback: revisionFeedback })
@@ -283,6 +289,66 @@ export function CustomerDashboard() {
               </div>
             )}
 
+            {/* ── الوثائق القانونية (Extraction needed) ── */}
+            {(() => {
+              const c = ticket.client;
+              if (!c) return null;
+              // Smart detection: check explicit flag OR infer from data
+              const hasExtractionData = !!(c.nationalIdUrl || c.fullNameInId || c.absherPhone);
+              const showSection = c.needsLegalExtraction === true || (hasExtractionData && !c.hasLegalDoc);
+              if (!showSection) return null;
+
+              return (
+                <div className={`rounded-2xl border p-4 sm:p-6 flex items-start gap-4 transition-all ${
+                  c.docsApproved
+                    ? 'bg-emerald-50 border-emerald-200'
+                    : 'bg-slate-50 border-slate-200'
+                }`}>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                    c.docsApproved ? 'bg-emerald-100' : 'bg-amber-100'
+                  }`}>
+                    {c.docsApproved
+                      ? <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                      : <ShieldCheck className="w-5 h-5 text-amber-600" />
+                    }
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <h3 className="text-sm font-bold text-slate-800">الوثائق القانونية</h3>
+                      <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        c.docsApproved
+                          ? 'bg-emerald-100 border-emerald-200 text-emerald-700'
+                          : 'bg-amber-50 border-amber-200 text-amber-700'
+                      }`}>
+                        {c.docsApproved ? (
+                          <><CheckCircle2 className="w-3 h-3" /> تمت المراجعة</>
+                        ) : (
+                          <><Clock className="w-3 h-3" /> قيد المراجعة</>
+                        )}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      {c.docsApproved
+                        ? 'تمت مراجعة وثائقك والموافقة عليها من قِبل فريقنا. ✅'
+                        : 'تم استلام وثائقك، فريقنا يقوم بمراجعتها الآن. ستُبلَّغ فور الانتهاء.'
+                      }
+                    </p>
+                    {!c.docsApproved && c.nationalIdUrl && (
+                      <a
+                        href={c.nationalIdUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 mt-2 text-[11px] text-blue-600 hover:underline font-medium"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        عرض الوثيقة المرفوعة
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* PENDING_AM_REVIEW — final review notice */}
             {['PENDING_AM_REVIEW', 'DEVELOPMENT', 'DEVELOPMENT_REVISION'].includes(ticket.stage) && (
               <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 sm:p-6 flex items-start gap-3">
@@ -349,7 +415,6 @@ export function CustomerDashboard() {
                   {STEPS.map((step, idx) => {
                     const isCompleted = idx < currentStep;
                     const isCurrent = idx === currentStep;
-                    const isPending = idx > currentStep;
                     return (
                       <div key={step.id} className="relative z-10 flex flex-col items-center" style={{ width: `${100 / STEPS.length}%` }}>
                         {isCurrent && (
@@ -494,11 +559,40 @@ export function CustomerDashboard() {
                       <ShieldCheck className="w-5 h-5 text-emerald-500 shrink-0" /> الوثائق القانونية
                     </h3>
                     <div className="flex-1 flex flex-col justify-center space-y-4">
-                      {ticket.client.hasLegalDoc !== false && (ticket.client.legalDocUrl || ticket.client.documentFileUrl) ? (
+                      {ticket.client.docsApproved ? (
+                        /* ✅ APPROVED STATE */
                         <>
                           <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full text-xs font-bold text-emerald-700 self-start">
                             <CheckCircle2 className="w-3.5 h-3.5" />
-                            الوثيقة مرفقة
+                            تم الاعتماد
+                          </div>
+                          <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100">
+                            <p className="text-xs text-emerald-800 font-medium">تمت مراجعة وثائقك والموافقة عليها من قِبل فريقنا. ✅</p>
+                          </div>
+                          {(ticket.client.legalDocUrl || ticket.client.documentFileUrl) && (
+                            <a
+                              href={ticket.client.legalDocUrl || ticket.client.documentFileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:bg-slate-100 transition-colors group"
+                            >
+                              <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center text-emerald-500">
+                                <FileText className="w-6 h-6" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold text-slate-800 truncate">السجل التجاري / الوثيقة</p>
+                                <p className="text-[10px] text-slate-400">عرض الملف</p>
+                              </div>
+                              <ExternalLink className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-colors" />
+                            </a>
+                          )}
+                        </>
+                      ) : ticket.client.hasLegalDoc !== false && (ticket.client.legalDocUrl || ticket.client.documentFileUrl) ? (
+                        /* Has document uploaded */
+                        <>
+                          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full text-xs font-bold text-blue-700 self-start">
+                            <Clock className="w-3.5 h-3.5" />
+                            قيد المراجعة
                           </div>
                           <a 
                             href={ticket.client.legalDocUrl || ticket.client.documentFileUrl} 
@@ -516,7 +610,8 @@ export function CustomerDashboard() {
                             <ExternalLink className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-colors" />
                           </a>
                         </>
-                      ) : ticket.client.hasLegalDoc === false ? (
+                    ) : ticket.client.nationalIdUrl || ticket.client.fullNameInId ? (
+                        /* Needs extraction — pending review */
                         <>
                           <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full text-xs font-bold text-amber-700 self-start">
                             <Clock className="w-3.5 h-3.5" />
@@ -524,7 +619,7 @@ export function CustomerDashboard() {
                           </div>
                           <div className="p-4 bg-amber-50/50 rounded-2xl border border-amber-100 space-y-4">
                             <p className="text-xs text-amber-800 font-medium">تم طلب استخراج وثيقة عمل حر / سجل تجاري. فريقنا يعمل على ذلك.</p>
-                            
+
                             <div className="space-y-3 pt-2 border-t border-amber-200/50">
                               {ticket.client.fullNameInId && (
                                 <div className="flex items-center gap-3 text-sm">
@@ -568,13 +663,15 @@ export function CustomerDashboard() {
                             </div>
                           </div>
                         </>
-                      ) : (
+                    ) : (
                         <div className="text-center py-6">
                           <p className="text-sm text-slate-400">لم يتم رفع وثائق قانونية</p>
                         </div>
-                      )}
+                    )}
+
                     </div>
                   </div>
+
                 </div>
 
                 {/* Reference Images */}

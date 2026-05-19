@@ -25,7 +25,7 @@ export const mockTickets = [
   },
 ];
 
-export const simulateAIProposal = async (data: any) => {
+export const simulateAIProposal = async (_data: any) => {
   return new Promise((resolve) => {
     setTimeout(() => {
       resolve({

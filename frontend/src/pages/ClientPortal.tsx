@@ -11,16 +11,25 @@ export function ClientPortal() {
   const [intakeData, setIntakeData] = useState<any>(null);
   const [proposal, setProposal] = useState<any>(null);
 
-  const { user } = useAuthStore();
+  const { user, isProfileComplete } = useAuthStore();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user?.role === 'CUSTOMER') {
-      navigate('/dashboard/customer');
-    } else if (user && user.role !== 'CUSTOMER') {
+    if (!user) return; // not logged in — show the public onboarding form normally
+
+    if (user.role !== 'CUSTOMER') {
+      // Staff who land on /client get sent to their dashboard
       navigate('/dashboard');
+      return;
     }
-  }, [user, navigate]);
+
+    // CUSTOMER: only redirect away if their profile is already complete
+    if (isProfileComplete) {
+      navigate('/dashboard/customer');
+    }
+    // isProfileComplete === false → stay here and fill the form
+  }, [user, isProfileComplete, navigate]);
+
 
   const handleLegalNext = (data: any) => {
     setLegalData(data);
