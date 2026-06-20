@@ -36,7 +36,6 @@ export function DesignSection({ ticket, headers, staff, userRole, onRefresh, set
   const [reviewLoading, setReviewLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   // Transfer states
-  const [showTransfer, setShowTransfer] = useState(false);
   const [selectedDevId, setSelectedDevId] = useState('');
   const [devBrief, setDevBrief] = useState('');
   const [transferring, setTransferring] = useState(false);
@@ -157,15 +156,7 @@ export function DesignSection({ ticket, headers, staff, userRole, onRefresh, set
   // Designer can edit only in DRAFT / revision statuses
   const canDesignerEdit = isDesigner && ['DRAFT', 'SEO_REVISION', 'CLIENT_REVISION'].includes(status);
 
-  // Get approved proposal data
-  let approvedName = '', approvedDomain = '';
-  const fetchProposal = async () => {
-    try {
-      const res = await fetch(`${API}/api/tickets/${ticket.id}/seo-proposals`, { headers });
-      const p = await res.json();
-      if (p?.selectedName) { approvedName = p.selectedName; approvedDomain = p.selectedDomain; }
-    } catch {}
-  };
+
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -176,7 +167,7 @@ export function DesignSection({ ticket, headers, staff, userRole, onRefresh, set
           <p className="text-xs text-blue-900 whitespace-pre-wrap leading-relaxed">{ticket.seoBrief}</p>
           {proposal?.generatedLogoUrl && (
             <div className="mt-3 flex items-center gap-2">
-              <img src={normalizeUrl(proposal.generatedLogoUrl)} alt="الشعار" className="w-10 h-10 rounded-lg object-contain bg-white border" />
+              <img src={normalizeUrl(proposal.generatedLogoUrl) || ''} alt="الشعار" className="w-10 h-10 rounded-lg object-contain bg-white border" />
               <span className="text-[10px] text-blue-600">الشعار المعتمد</span>
             </div>
           )}
@@ -249,8 +240,8 @@ export function DesignSection({ ticket, headers, staff, userRole, onRefresh, set
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {images.map((url, i) => (
               <div key={i} className="relative group">
-                <a href={normalizeUrl(url)} target="_blank" rel="noreferrer">
-                  <img src={normalizeUrl(url)} alt={`تصميم ${i + 1}`} className="w-full h-24 object-cover rounded-xl border border-slate-200" />
+                <a href={normalizeUrl(url) || ''} target="_blank" rel="noreferrer">
+                  <img src={normalizeUrl(url) || ''} alt={`تصميم ${i + 1}`} className="w-full h-24 object-cover rounded-xl border border-slate-200" />
                 </a>
                 {/* Only DESIGNER can remove images */}
                 {canDesignerEdit && (

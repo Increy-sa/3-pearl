@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, CheckCircle2, Edit2, Loader2, Check, Palette, Type, MessageCircle, Target, FileText, Image as ImageIcon, UploadCloud, Phone, ArrowLeft } from 'lucide-react';
+import { Sparkles, CheckCircle2, Edit2, Loader2, Check, Palette, Type, MessageCircle, Target, Image as ImageIcon, UploadCloud, Phone, ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from '../../config/api';
@@ -20,7 +20,7 @@ export function AIProposalView({ proposal, legalData, intakeData }: { proposal: 
   const [loading, setLoading] = useState(false);
   const [confirmingDashboard, setConfirmingDashboard] = useState(false);
 
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoUrl, _setLogoUrl] = useState<string | null>(null);
   const [referenceLogoUrl, setReferenceLogoUrl] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
 

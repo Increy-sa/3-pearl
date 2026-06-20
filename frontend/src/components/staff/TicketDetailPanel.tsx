@@ -8,7 +8,7 @@ import {
 
 import { API_URL } from '../../config/api';
 import { normalizeUrl } from '../../utils/normalizeUrl';
-import { SeoChecklistPanel } from './SeoChecklistPanel';
+
 import { SeoStageSection } from './SeoStageSection';
 import { DesignSection } from './DesignSection';
 import { DevSection } from './DevSection';
@@ -85,7 +85,7 @@ interface Props {
 }
 
 // ═══════ INTAKE Section Component ═══════
-function IntakeSection({ ticket, headers, staff, userRole, onRefresh, setErrorModal }: {
+function IntakeSection({ ticket, headers, staff, userRole: _userRole, onRefresh, setErrorModal }: {
   ticket: any; headers: Record<string, string>; staff: any[]; userRole: string;
   onRefresh: () => void; setErrorModal: (msg: string | null) => void;
 }) {
@@ -475,42 +475,7 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
   const [notes, setNotes] = useState(ticket.staffNotes || '');
   const [assets, setAssets] = useState(ticket.assetsUrl || '');
 
-
-  // Legal Processing states
-  const [legalDocUrl, setLegalDocUrl] = useState('');
-  const [domainName, setDomainName] = useState('');
-  const [sallaStoreUrl, setSallaStoreUrl] = useState('');
-  const [storeEmail, setStoreEmail] = useState('');
-  const [storePassword, setStorePassword] = useState('');
-  const [isSavingLegal, setIsSavingLegal] = useState(false);
-  const [isUploadingLegal, setIsUploadingLegal] = useState(false);
-
-  // Design Files states
-  const [designLogoUrl, setDesignLogoUrl] = useState('');
-  const [designBanners, setDesignBanners] = useState<string[]>([]);
-  const [designCategoriesUrl, setDesignCategoriesUrl] = useState('');
-  const [isSavingDesign, setIsSavingDesign] = useState(false);
-  const [isUploadingDesign, setIsUploadingDesign] = useState(false);
   const [errorModal, setErrorModal] = useState<string | null>(null);
-
-  // Designer approval workflow states
-  const [isSubmittingApproval, setIsSubmittingApproval] = useState(false);
-  const [isMovingToDev, setIsMovingToDev] = useState(false);
-  const [designerActionError, setDesignerActionError] = useState<string | null>(null);
-  const [designerActionSuccess, setDesignerActionSuccess] = useState<string | null>(null);
-
-  // Developer complete-work states
-  const [isCompletingWork, setIsCompletingWork] = useState(false);
-  const [devCompleteError, setDevCompleteError]   = useState<string | null>(null);
-  const [devCompleteSuccess, setDevCompleteSuccess] = useState<string | null>(null);
-
-  // Account Manager review states
-  const [amReviewAction, setAmReviewAction]   = useState<'APPROVE' | 'REVISE' | null>(null);
-  const [amFeedback, setAmFeedback]           = useState('');
-  const [amSiteUrl, setAmSiteUrl]             = useState('');
-  const [isAmReviewing, setIsAmReviewing]     = useState(false);
-  const [amReviewError, setAmReviewError]     = useState<string | null>(null);
-  const [amReviewSuccess, setAmReviewSuccess] = useState<string | null>(null);
 
   // Emergency Transfer state (ADMIN only)
   const [emergencyStage, setEmergencyStage] = useState('');
@@ -530,21 +495,6 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
     setNotes(ticket.staffNotes || '');
     setAssets(ticket.assetsUrl || '');
 
-    // Init legal states
-    setLegalDocUrl(ticket.client?.documentFileUrl || ticket.client?.legalDocUrl || '');
-    setDomainName(ticket.storeDetails?.domainName || '');
-    setSallaStoreUrl(ticket.storeDetails?.sallaStoreUrl || '');
-    setStoreEmail(ticket.storeDetails?.storeEmail || '');
-    setStorePassword('');
-
-    // Init design states
-    setDesignLogoUrl(ticket.designLogoUrl || '');
-    try {
-      setDesignBanners(JSON.parse(ticket.designBannersUrl || '[]'));
-    } catch {
-      setDesignBanners(ticket.designBannersUrl ? [ticket.designBannersUrl] : []);
-    }
-    setDesignCategoriesUrl(ticket.designCategoriesUrl || '');
 
     // Fetch logo type image
     if (ticket.aiProposal?.selectedLogoType) {
@@ -590,229 +540,6 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
     onRefresh();
   };
 
-  const uploadLegalDoc = async (file: File) => {
-    setIsUploadingLegal(true);
-    try {
-      const reader = new FileReader();
-      const base64Promise = new Promise<string>((resolve) => {
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
-      const fileData = await base64Promise;
-
-      const res = await fetch(`${API}/api/upload`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileName: file.name, fileData })
-      });
-      if (res.ok) {
-        const { url } = await res.json();
-        setLegalDocUrl(url);
-      }
-    } finally {
-      setIsUploadingLegal(false);
-    }
-  };
-
-  const saveLegalData = async () => {
-    const missing = [];
-    if (!legalDocUrl) missing.push('وثيقة العمل الحر');
-    if (!domainName) missing.push('اسم الدومين');
-    if (!sallaStoreUrl) missing.push('رابط متجر سلة / زد');
-    if (!storeEmail) missing.push('إيميل المتجر');
-    
-    if (missing.length > 0) {
-      return setErrorModal(`الرجاء تعبئة الحقول التالية قبل الحفظ:\n- ${missing.join('\n- ')}`);
-    }
-
-    setIsSavingLegal(true);
-    try {
-      const res = await fetch(`${API}/api/staff/tickets/${ticket.id}/legal-processing`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({
-          documentFileUrl: legalDocUrl,
-          domainName,
-          sallaStoreUrl,
-          storeEmail,
-          storePassword
-        })
-      });
-      if (res.ok) {
-        onRefresh();
-      } else {
-        const err = await res.json();
-        setErrorModal(err.error || 'فشل الحفظ');
-      }
-    } finally {
-      setIsSavingLegal(false);
-    }
-  };
-
-  const uploadDesignFile = async (file: File, setter: (url: string) => void) => {
-    setIsUploadingDesign(true);
-    try {
-      const reader = new FileReader();
-      const base64Promise = new Promise<string>((resolve) => {
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
-      const fileData = await base64Promise;
-
-      const res = await fetch(`${API}/api/upload`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileName: file.name, fileData })
-      });
-      if (res.ok) {
-        const { url } = await res.json();
-        setter(url);
-      }
-    } finally {
-      setIsUploadingDesign(false);
-    }
-  };
-
-  const saveDesignFiles = async () => {
-    const missing = [];
-    if (!designLogoUrl) missing.push('شعار المتجر');
-    const validBanners = designBanners.filter(b => b.trim() !== '');
-    if (validBanners.length === 0) missing.push('البنرات');
-    // Categories are optional
-
-    if (missing.length > 0) {
-      return setErrorModal(`الرجاء تعبئة الحقول التالية قبل الحفظ:\n- ${missing.join('\n- ')}`);
-    }
-
-    setIsSavingDesign(true);
-    try {
-      const res = await fetch(`${API}/api/staff/tickets/${ticket.id}/design-files`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({
-          designLogoUrl,
-          designBannersUrl: JSON.stringify(validBanners),
-          designCategoriesUrl
-        })
-      });
-      if (res.ok) {
-        onRefresh();
-      } else {
-        const err = await res.json();
-        setErrorModal(err.error || 'فشل الحفظ');
-      }
-    } finally {
-      setIsSavingDesign(false);
-    }
-  };
-
-  const submitForApproval = async () => {
-    setIsSubmittingApproval(true);
-    setDesignerActionError(null);
-    setDesignerActionSuccess(null);
-    try {
-      const res = await fetch(`${API}/api/designer/submit-for-approval`, {
-        method: 'POST', headers, body: JSON.stringify({ ticketId: ticket.id }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setDesignerActionSuccess('تم إرسال التصاميم للعميل بنجاح. الحالة الآن: بانتظار اعتماد العميل.');
-        onRefresh();
-      } else {
-        setDesignerActionError(data.error || 'فشل الإرسال');
-      }
-    } catch {
-      setDesignerActionError('تعذر الاتصال بالخادم');
-    } finally {
-      setIsSubmittingApproval(false);
-    }
-  };
-
-  const moveToDevelopment = async () => {
-    setIsMovingToDev(true);
-    setDesignerActionError(null);
-    setDesignerActionSuccess(null);
-    try {
-      const res = await fetch(`${API}/api/designer/move-to-development`, {
-        method: 'POST', headers, body: JSON.stringify({ ticketId: ticket.id }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setDesignerActionSuccess('تم تحويل الطلب إلى مرحلة التطوير بنجاح!');
-        onRefresh();
-      } else {
-        setDesignerActionError(data.error || 'فشل التحويل');
-      }
-    } catch {
-      setDesignerActionError('تعذر الاتصال بالخادم');
-    } finally {
-      setIsMovingToDev(false);
-    }
-  };
-
-  // ── Developer: complete work → send to AM ──────────────────
-  const completeWork = async () => {
-    setIsCompletingWork(true);
-    setDevCompleteError(null);
-    setDevCompleteSuccess(null);
-    try {
-      const res = await fetch(`${API}/api/developer/complete-work`, {
-        method: 'POST', headers, body: JSON.stringify({ ticketId: ticket.id }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setDevCompleteSuccess('تم إرسال الطلب لمدير الحساب للمراجعة بنجاح!');
-        onRefresh();
-      } else {
-        setDevCompleteError(data.error || 'فشل الإرسال');
-      }
-    } catch {
-      setDevCompleteError('تعذر الاتصال بالخادم');
-    } finally {
-      setIsCompletingWork(false);
-    }
-  };
-
-  // ── Account Manager: approve or revise developer work ──────
-  const submitAmReview = async () => {
-    if (!amReviewAction) return;
-    if (amReviewAction === 'REVISE' && !amFeedback.trim()) {
-      setAmReviewError('يرجى كتابة ملاحظات التعديل المطلوبة.');
-      return;
-    }
-    setIsAmReviewing(true);
-    setAmReviewError(null);
-    setAmReviewSuccess(null);
-    try {
-      const res = await fetch(`${API}/api/am/review-development`, {
-        method: 'POST', headers,
-        body: JSON.stringify({
-          ticketId: ticket.id,
-          action: amReviewAction,
-          feedback: amFeedback,
-          siteUrl: amSiteUrl.trim() || null,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setAmReviewSuccess(
-          amReviewAction === 'APPROVE'
-            ? '🎉 تمت الموافقة النهائية! تم تسليم الطلب للعميل وإغلاقه.'
-            : 'تم إرسال ملاحظات التعديل للمطوّر بنجاح.'
-        );
-        setAmReviewAction(null);
-        setAmFeedback('');
-        setAmSiteUrl('');
-        onRefresh();
-      } else {
-        setAmReviewError(data.error || 'فشل الإرسال');
-      }
-    } catch {
-      setAmReviewError('تعذر الاتصال بالخادم');
-    } finally {
-      setIsAmReviewing(false);
-    }
-  };
 
   // ── Approve extraction documents (ADMIN / AM only) ──────────────────────
   const approveDocuments = async () => {

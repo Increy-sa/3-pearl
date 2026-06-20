@@ -42,7 +42,6 @@ export function DevSection({ ticket, headers, userRole, onRefresh, setErrorModal
   // ─── Role helpers ───────────────────────────────────────────────────
   const isDeveloper = userRole === 'DEVELOPER';
   const isSEO = userRole === 'SEO';
-  const isAdminOrAM = userRole === 'ADMIN' || userRole === 'ACCOUNT_MANAGER';
 
   useEffect(() => {
     fetch(`${API}/api/tickets/${ticket.id}/dev-checklist`, { headers })
@@ -149,8 +148,8 @@ export function DevSection({ ticket, headers, userRole, onRefresh, setErrorModal
           {imgs.length > 0 && (
             <div className="grid grid-cols-3 gap-2">
               {imgs.map((url, i) => (
-                <a key={i} href={normalizeUrl(url)} target="_blank" rel="noreferrer">
-                  <img src={normalizeUrl(url)} alt={`تصميم ${i + 1}`} className="w-full h-20 object-cover rounded-xl border border-violet-200 hover:opacity-80 transition-opacity" />
+                <a key={i} href={normalizeUrl(url) || ''} target="_blank" rel="noreferrer">
+                  <img src={normalizeUrl(url) || ''} alt={`تصميم ${i + 1}`} className="w-full h-20 object-cover rounded-xl border border-violet-200 hover:opacity-80 transition-opacity" />
                 </a>
               ))}
             </div>

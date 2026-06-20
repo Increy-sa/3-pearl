@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { API_URL } from '../../config/api';
 import { SeoProposalsSection } from './SeoProposalsSection';
-import { SeoChecklistPanel } from './SeoChecklistPanel';
+
 import { CheckCircle2, ArrowRight, Clock, Users, FileText, Send } from 'lucide-react';
 import { useToast } from '../ui/Toast';
 const API = API_URL;
@@ -75,14 +75,13 @@ export function SeoStageSection({ ticket, headers, staff, userRole, onRefresh, s
 }
 
 // ══════ Store Setup Sub-Step ══════
-function StoreSetupSubStep({ ticket, headers, staff, userRole, onRefresh, setErrorModal }: Props) {
+function StoreSetupSubStep({ ticket, headers, staff, userRole: _userRole, onRefresh, setErrorModal }: Props) {
   const [checklist, setChecklist] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
   const [saveOk, setSaveOk] = useState(false);
   const [proposal, setProposal] = useState<any>(null);
 
   // Transfer states
-  const [showTransfer, setShowTransfer] = useState(false);
   const [selectedDesignerId, setSelectedDesignerId] = useState('');
   const [seoBrief, setSeoBrief] = useState('');
   const [transferring, setTransferring] = useState(false);

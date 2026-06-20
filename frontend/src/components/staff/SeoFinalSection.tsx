@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { API_URL } from '../../config/api';
 import { normalizeUrl } from '../../utils/normalizeUrl';
-import { CheckCircle2, AlertCircle, Send, Clock, FileText, CreditCard, Truck, Search, Users, Globe, Mail, Lock, ExternalLink, Link2, Eye, EyeOff, Image as ImageIcon } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Send, Clock, Globe, Mail, Lock, ExternalLink, Link2, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '../ui/Toast';
 import { ensureUrl } from '../../utils/ensureUrl';
 
@@ -64,7 +64,6 @@ export function SeoFinalSection({ ticket, headers, userRole, onRefresh, setError
   const [delivery, setDelivery] = useState<any>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isAM = ['ADMIN', 'ACCOUNT_MANAGER'].includes(userRole);
-  const isSEO = userRole === 'SEO';
   const { showToast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
 
@@ -298,8 +297,8 @@ export function SeoFinalSection({ ticket, headers, userRole, onRefresh, setError
                 {imgs.length > 0 && (
                   <div className="grid grid-cols-3 gap-2">
                     {imgs.map((url: string, i: number) => (
-                      <a key={i} href={normalizeUrl(url)} target="_blank" rel="noreferrer">
-                        <img src={normalizeUrl(url)} alt={`تصميم ${i + 1}`} className="w-full h-16 object-cover rounded-xl border border-slate-200 hover:opacity-80" />
+                      <a key={i} href={normalizeUrl(url) || ''} target="_blank" rel="noreferrer">
+                        <img src={normalizeUrl(url) || ''} alt={`تصميم ${i + 1}`} className="w-full h-16 object-cover rounded-xl border border-slate-200 hover:opacity-80" />
                       </a>
                     ))}
                   </div>
@@ -310,7 +309,7 @@ export function SeoFinalSection({ ticket, headers, userRole, onRefresh, setError
             {/* Logo */}
             {ticket.aiProposal?.generatedLogoUrl && (
               <div className="flex items-center gap-3">
-                <img src={normalizeUrl(ticket.aiProposal.generatedLogoUrl)} alt="الشعار" className="w-12 h-12 rounded-xl object-contain bg-white border border-slate-200 p-1" />
+                <img src={normalizeUrl(ticket.aiProposal.generatedLogoUrl) || ''} alt="الشعار" className="w-12 h-12 rounded-xl object-contain bg-white border border-slate-200 p-1" />
                 <span className="text-[10px] text-slate-500">الشعار المعتمد</span>
               </div>
             )}

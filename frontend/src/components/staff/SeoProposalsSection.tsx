@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { API_URL } from '../../config/api';
-import { Send, CheckCircle2, AlertCircle, MessageSquare, Plus, Minus, Globe, Type } from 'lucide-react';
+import { Send, CheckCircle2, AlertCircle, Plus, Minus, Globe, Type } from 'lucide-react';
 import { useToast } from '../ui/Toast';
 const API = API_URL;
 const STATUS_BADGES: Record<string, { label: string; cls: string }> = {
