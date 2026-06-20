@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export type StaffRole = 'ADMIN' | 'ACCOUNT_MANAGER' | 'DESIGNER' | 'DEVELOPER' | 'QA';
+export type StaffRole = 'ADMIN' | 'ACCOUNT_MANAGER' | 'DESIGNER' | 'DEVELOPER' | 'SEO';
 export type Role = StaffRole | 'CUSTOMER';
 
 interface User {

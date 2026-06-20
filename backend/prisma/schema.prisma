@@ -13,13 +13,13 @@ model User {
   name             String
   email            String   @unique
   passwordHash     String?
-  role             String   // ADMIN | ACCOUNT_MANAGER | DESIGNER | DEVELOPER | QA | CUSTOMER
+  role             String   // ADMIN | ACCOUNT_MANAGER | SEO | DESIGNER | DEVELOPER | CUSTOMER
   isActive         Boolean  @default(true)
 
   managedTickets    Ticket[] @relation("AccountManager")
   designedTickets   Ticket[] @relation("Designer")
   developedTickets  Ticket[] @relation("Developer")
-  qaTickets         Ticket[] @relation("QA")
+  seoTickets        Ticket[] @relation("SEOSpecialist")
   customerTickets   Ticket[] @relation("Customer")
   
   notifications     Notification[]
@@ -52,21 +52,36 @@ model ClientInfo {
 
 // ─── AI Proposal ────────────────────────────────────────────────
 model AIProposal {
-  id               String   @id @default(uuid())
-  selectedColors   String   // JSON string of colors
-  brandVoice       String?
-  brandVision      String?
-  brandDescription String?
-  suggestedNames   String
-  businessName     String?  
-  description      String?  
-  industry         String?  
-  referenceLogos   String?  
-  generatedLogoUrl String?
-  selectedName     String?  
-  ticketId         String   @unique
-  ticket           Ticket   @relation(fields: [ticketId], references: [id])
+  id                    String   @id @default(uuid())
+  selectedColors        String   // JSON string of colors
+  brandVoice            String?
+  brandVision           String?
+  brandDescription      String?
+  suggestedNames        String
+  businessName          String?  
+  description           String?  
+  industry              String?  
+  referenceLogos        String?  
+  generatedLogoUrl      String?
+  selectedName          String?  
+  selectedLogoType      String?  // ID of chosen LogoType
+  selectedLogoTypeName  String?  // Display name (denormalized)
+  ticketId              String   @unique
+  ticket                Ticket   @relation(fields: [ticketId], references: [id])
 }
+
+// ─── Logo Types (Admin-managed) ─────────────────────────────────
+model LogoType {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  imageUrl    String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 
 // ─── Store Details (IT Credentials) ─────────────────────────────
 model StoreDetails {
@@ -104,7 +119,7 @@ model Ticket {
   amInstructions       String?
   designerInstructions String?
   developerInstructions String?
-  qaInstructions       String?
+  seoInstructions      String?
   deliveredSiteUrl     String?  // Live website URL set when AM approves → DELIVERED
   isArchived           Boolean  @default(false)
 
@@ -123,14 +138,40 @@ model Ticket {
   developerId      String?
   developer        User?        @relation("Developer", fields: [developerId], references: [id], onDelete: SetNull)
 
-  qaId             String?
-  qa               User?        @relation("QA", fields: [qaId], references: [id], onDelete: SetNull)
+  seoSpecialistId  String?      @map("qaId")
+  seoSpecialist    User?        @relation("SEOSpecialist", fields: [seoSpecialistId], references: [id], onDelete: SetNull)
 
   customerId       String?
   customer         User?        @relation("Customer", fields: [customerId], references: [id], onDelete: SetNull)
   
+  // ── INTAKE Stage Additions ─────────────────────────────────
+  dataRequests     DataRequest[]
+  freelanceDocUrl  String?       // رابط وثيقة العمل الحر
+  commercialRegUrl String?       // رابط السجل التجاري
+  intakeBrief      String?       // البريف الذي يكتبه AM عند تحويل الطلب للمرحلة التالية
+  assignedSeoId    String?       // ID الشخص SEO المعين
+
+  // ── SEO_STORE_SETUP Stage Additions ────────────────────────
+  seoProposals       SeoProposal[]
+  seoSubStep         String?   @default("PROPOSALS")  // PROPOSALS | STORE_SETUP | READY_TO_TRANSFER
+  assignedDesignerId String?   // ID المصمم UI/UX المعين من SEO
+  seoBrief           String?   // البريف من SEO للمصمم
+
+  // ── DESIGN & DEVELOPMENT Stage Additions ───────────────────
+  designDeliveries   DesignDelivery[]
+  devChecklist       DevChecklist?
+  designBrief        String?   // البيانات التلقائية المرسلة من SEO للمصمم
+  devBrief           String?   // البريف المرسل من SEO للمطور
+
+  // ── SEO_FINAL & DELIVERY Stage Additions ───────────────────
+  seoFinalChecklist  SeoFinalChecklist?
+  finalDeliveryNotes String?   // ملاحظات التسليم النهائي من AM
+  isDelivered        Boolean   @default(false)
+  deliveredAt        DateTime?
+
   notifications    Notification[]
   auditLogs        AuditLog[]
+  seoChecklist     SeoChecklist?
 }
 
 // ─── Notification ──────────────────────────────────────────────
@@ -161,4 +202,187 @@ model AuditLog {
 
   userId      String
   user        User     @relation(fields: [userId], references: [id])
+}
+
+// ─── SEO Checklist (Store Setup Tasks) ──────────────────────────
+model SeoChecklist {
+  id                        String   @id @default(uuid())
+  ticketId                  String   @unique
+  ticket                    Ticket   @relation(fields: [ticketId], references: [id])
+
+  // ── Business Setup ────────────────────────────────────────
+  nicheSelected             Boolean  @default(false)
+  domainChosen              Boolean  @default(false)
+  domainName                String?
+  gmailCreated              Boolean  @default(false)
+  gmailEmail                String?
+  gmailPassword             String?
+  sallaAccountCreated       Boolean  @default(false)
+  sallaEmail                String?
+  sallaPassword             String?
+  domainPurchased           Boolean  @default(false)
+  packageUpgraded           Boolean  @default(false)
+  packageType               String?
+
+  // ── Store Configuration ──────────────────────────────────
+  logoDesigned              Boolean  @default(false)
+  domainLinked              Boolean  @default(false)
+  googleAnalyticsLinked     Boolean  @default(false)
+  logoApplied               Boolean  @default(false)
+  storeVerified             Boolean  @default(false)
+  siloCreated               Boolean  @default(false)
+  bankAccountAdded          Boolean  @default(false)
+  infoPagesDone             Boolean  @default(false)
+  footerDescDone            Boolean  @default(false)
+  contactInfoAdded          Boolean  @default(false)
+  whatsappButtonAdded       Boolean  @default(false)
+
+  // ── Products & Supplier ─────────────────────────────────
+  supplierSelected          Boolean  @default(false)
+  supplierPlatformName      String?
+  apiLinked                 Boolean  @default(false)
+  productsUploaded          Boolean  @default(false)
+  productsCategorized       Boolean  @default(false)
+
+  // ── Design & SEO ───────────────────────────────────────
+  bannerDesigned            Boolean  @default(false)
+  seoHomepage               Boolean  @default(false)
+  seoCategoriesPage         Boolean  @default(false)
+
+  // ── Launch ─────────────────────────────────────────────
+  profitMarginsSet          Boolean  @default(false)
+  paymentGatewaysLinked     Boolean  @default(false)
+  shippingCompaniesLinked   Boolean  @default(false)
+  uiApplied                 Boolean  @default(false)
+  storeLaunched             Boolean  @default(false)
+  linkSentToClient          Boolean  @default(false)
+
+  // ── Store Credentials (SEO sub-step: STORE_SETUP) ──────
+  storeEmail                String?   // إيميل المتجر في سلة
+  storePassword             String?   // باسورد المتجر في سلة
+
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+}
+
+// ─── Data Request (AM ↔ Customer Communication during INTAKE) ───
+model DataRequest {
+  id            String   @id @default(uuid())
+  ticketId      String
+  ticket        Ticket   @relation(fields: [ticketId], references: [id])
+  fromRole      String   // "ACCOUNT_MANAGER" أو "CUSTOMER"
+  message       String   // نص الطلب أو الرد
+  createdAt     DateTime @default(now())
+  isResolved    Boolean  @default(false)
+}
+
+// ─── SEO Proposal (Name & Domain Suggestions) ───────────────────
+model SeoProposal {
+  id              String   @id @default(uuid())
+  ticketId        String
+  ticket          Ticket   @relation(fields: [ticketId], references: [id])
+  
+  // مقترحات الأسماء (حد أقصى 4)
+  storeName1      String?
+  storeName2      String?
+  storeName3      String?
+  storeName4      String?
+  
+  // مقترحات الدومين (حد أقصى 4)
+  domain1         String?
+  domain2         String?
+  domain3         String?
+  domain4         String?
+  
+  // حالة المقترحات
+  status          String   @default("DRAFT")  // DRAFT | SENT_TO_AM | AM_APPROVED | AM_REVISION | SENT_TO_CLIENT | CLIENT_APPROVED | CLIENT_REVISION
+  
+  // اختيارات العميل النهائية
+  selectedName    String?
+  selectedDomain  String?
+  
+  // ملاحظات التعديل
+  amNotes         String?
+  clientNotes     String?
+  
+  // هل المقترحات معتمدة نهائياً
+  isFinalized     Boolean  @default(false)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── Design Delivery (Designer → SEO → Client) ─────────────────
+model DesignDelivery {
+  id              String   @id @default(uuid())
+  ticketId        String
+  ticket          Ticket   @relation(fields: [ticketId], references: [id])
+  
+  figmaLink       String?           // رابط فيجما
+  images          String?           // JSON array من روابط الصور
+  
+  status          String   @default("DRAFT")  // DRAFT | SENT_TO_SEO | SEO_APPROVED | SEO_REVISION | SENT_TO_CLIENT | CLIENT_APPROVED | CLIENT_REVISION
+  
+  seoNotes        String?
+  clientNotes     String?
+  
+  isFinalized     Boolean  @default(false)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── Dev Checklist (Developer Tasks) ────────────────────────────
+model DevChecklist {
+  id                    String   @id @default(uuid())
+  ticketId              String   @unique
+  ticket                Ticket   @relation(fields: [ticketId], references: [id])
+  
+  designApplied         Boolean  @default(false)
+  pagesSetup            Boolean  @default(false)
+  uiTested              Boolean  @default(false)
+  deliveredToSeo        Boolean  @default(false)
+  
+  isSubmittedToSeo      Boolean  @default(false)  // المطور يتحكم متى يسلّم العمل لـ SEO
+  
+  seoReviewStatus       String?  @default("PENDING")  // PENDING | APPROVED | REVISION
+  seoReviewNotes        String?
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+// ─── SEO Final Checklist (Payment, Shipping, SEO Optimization) ───
+model SeoFinalChecklist {
+  id                    String   @id @default(uuid())
+  ticketId              String   @unique
+  ticket                Ticket   @relation(fields: [ticketId], references: [id])
+  
+  // وسائل الدفع
+  paymentActivated      Boolean  @default(false)
+  paymentTested         Boolean  @default(false)
+  paymentGatewaysOk     Boolean  @default(false)
+  
+  // الشحن
+  shippingLinked        Boolean  @default(false)
+  shippingZonesSet      Boolean  @default(false)
+  shippingTested        Boolean  @default(false)
+  
+  // تحسينات SEO
+  pageTitlesSet         Boolean  @default(false)
+  metaDescSet           Boolean  @default(false)
+  urlsOptimized         Boolean  @default(false)
+  productsOptimized     Boolean  @default(false)
+  contentReviewed       Boolean  @default(false)
+  finalInspection       Boolean  @default(false)
+  
+  // حالة التسليم
+  status                String   @default("IN_PROGRESS")
+  seoBriefToAm          String?
+  amNotes               String?
+  clientNotes           String?
+  isFinalized           Boolean  @default(false)
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }

@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { ToastProvider } from './components/ui/Toast';
 import { ClientPortal } from './pages/ClientPortal';
 import { DashboardLayout } from './components/dashboard/DashboardLayout';
 import { StaffDashboard } from './pages/admin/StaffDashboard';
@@ -51,38 +52,40 @@ function ClientGuard({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Navigate to="/client" replace />} />
+    <ToastProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Navigate to="/client" replace />} />
 
-        <Route
-          path="/client"
-          element={
-            <ClientGuard>
-              <ClientPortal />
-            </ClientGuard>
-          }
-        />
+          <Route
+            path="/client"
+            element={
+              <ClientGuard>
+                <ClientPortal />
+              </ClientGuard>
+            }
+          />
 
-        <Route path="/login" element={<Login />} />
-        <Route path="/dashboard/customer" element={<CustomerDashboard />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/dashboard/customer" element={<CustomerDashboard />} />
 
-        {/* All /dashboard routes are protected by StaffGuard */}
-        <Route
-          path="/dashboard"
-          element={
-            <StaffGuard>
-              <DashboardLayout />
-            </StaffGuard>
-          }
-        >
-          <Route index element={<StaffDashboard />} />
-          <Route path="staff" element={<ManageStaff />} />
-          <Route path="reports" element={<ReportsDashboard />} />
-          <Route path="settings" element={<AdminSettings />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+          {/* All /dashboard routes are protected by StaffGuard */}
+          <Route
+            path="/dashboard"
+            element={
+              <StaffGuard>
+                <DashboardLayout />
+              </StaffGuard>
+            }
+          >
+            <Route index element={<StaffDashboard />} />
+            <Route path="staff" element={<ManageStaff />} />
+            <Route path="reports" element={<ReportsDashboard />} />
+            <Route path="settings" element={<AdminSettings />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </ToastProvider>
   );
 }
 

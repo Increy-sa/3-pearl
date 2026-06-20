@@ -1,31 +1,35 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   X, Clock, AlertTriangle, Shield, Lock, User, Mail, Phone,
   CreditCard, Palette, Globe, ExternalLink, CheckSquare, Square,
-  FileText, Eye, EyeOff, MessageSquare, Link2, Download, XCircle,
-  Timer, AlertCircle, Send, CheckCircle2, Users, ArrowRight
+  FileText, Eye, EyeOff, MessageSquare, Link2, Download,
+  AlertCircle, Send, CheckCircle2, Users, ArrowRight
 } from 'lucide-react';
 
 import { API_URL } from '../../config/api';
+import { normalizeUrl } from '../../utils/normalizeUrl';
+import { SeoChecklistPanel } from './SeoChecklistPanel';
+import { SeoStageSection } from './SeoStageSection';
+import { DesignSection } from './DesignSection';
+import { DevSection } from './DevSection';
+import { SeoFinalSection } from './SeoFinalSection';
+import { useToast } from '../ui/Toast';
+import { ensureUrl } from '../../utils/ensureUrl';
 
 const API = API_URL;
 
+
 const STAGE_CONFIG: Record<string, { label: string; color: string; bg: string; dot: string }> = {
   INTAKE:                   { label: 'استلام الطلب',           color: 'text-sky-700',      bg: 'bg-sky-50 border-sky-200',         dot: 'bg-sky-500' },
-  LEGAL_PROCESSING:         { label: 'المعالجة القانونية', color: 'text-amber-700',    bg: 'bg-amber-50 border-amber-200',     dot: 'bg-amber-500' },
+  SEO_STORE_SETUP:          { label: 'إعدادات الـ SEO',     color: 'text-teal-700',     bg: 'bg-teal-50 border-teal-200',       dot: 'bg-teal-500' },
   DESIGN:                   { label: 'التصميم',             color: 'text-violet-700',   bg: 'bg-violet-50 border-violet-200',   dot: 'bg-violet-500' },
-  PENDING_CLIENT_APPROVAL:  { label: 'بانتظار اعتماد العميل', color: 'text-purple-700',   bg: 'bg-purple-50 border-purple-200',   dot: 'bg-purple-500' },
-  CLIENT_APPROVED:          { label: 'معتمد من العميل',      color: 'text-emerald-700',  bg: 'bg-emerald-50 border-emerald-200', dot: 'bg-emerald-500' },
-  CLIENT_REVISION:          { label: 'طلب تعديل من العميل',  color: 'text-red-700',      bg: 'bg-red-50 border-red-200',         dot: 'bg-red-500' },
   DEVELOPMENT:              { label: 'التطوير',            color: 'text-blue-700',     bg: 'bg-blue-50 border-blue-200',       dot: 'bg-blue-500' },
-  PENDING_AM_REVIEW:        { label: 'بانتظار مراجعة مدير الحساب', color: 'text-orange-700',   bg: 'bg-orange-50 border-orange-200',   dot: 'bg-orange-500' },
-  DEVELOPMENT_REVISION:     { label: 'تعديل من مدير الحساب',   color: 'text-red-700',      bg: 'bg-red-50 border-red-200',         dot: 'bg-red-500' },
-  REVIEW:                   { label: 'المراجعة',           color: 'text-orange-700',   bg: 'bg-orange-50 border-orange-200',   dot: 'bg-orange-500' },
+  SEO_FINAL:                { label: 'المراجعة النهائية',  color: 'text-emerald-700',  bg: 'bg-emerald-50 border-emerald-200', dot: 'bg-emerald-500' },
   DELIVERED:                { label: 'تم التسليم',         color: 'text-emerald-700',  bg: 'bg-emerald-50 border-emerald-200', dot: 'bg-emerald-500' },
 };
-const STAGES_ORDER = ['INTAKE','LEGAL_PROCESSING','DESIGN','PENDING_CLIENT_APPROVAL','CLIENT_APPROVED','CLIENT_REVISION','DEVELOPMENT','PENDING_AM_REVIEW','DEVELOPMENT_REVISION','REVIEW','DELIVERED'];
+const STAGES_ORDER = ['INTAKE','SEO_STORE_SETUP','DESIGN','DEVELOPMENT','SEO_FINAL','DELIVERED'];
 
-const canChangeStage = (r: string) => ['ADMIN','ACCOUNT_MANAGER','DESIGNER'].includes(r);
+
 const canAssign      = (r: string) => ['ADMIN','ACCOUNT_MANAGER','DESIGNER'].includes(r);
 const canSeePassword = (r: string) => ['ADMIN','DEVELOPER'].includes(r);
 const ROLE_LABELS: Record<string, string> = {
@@ -33,16 +37,14 @@ const ROLE_LABELS: Record<string, string> = {
   ACCOUNT_MANAGER: 'مدير حساب',
   DESIGNER: 'مصمم',
   DEVELOPER: 'مطوّر',
-  QA: 'مراجع جودة',
+  SEO: 'مختص SEO',
 };
-const ASSIGNABLE_ROLES = ['ACCOUNT_MANAGER', 'DESIGNER', 'DEVELOPER', 'QA'] as const;
 const INSTRUCTION_LABELS: Record<string, string> = {
   ACCOUNT_MANAGER: 'توجيهات لمدير الحساب',
   DESIGNER: 'توجيهات للمصمم',
   DEVELOPER: 'توجيهات للمطور',
-  QA: 'توجيهات لمراجع الجودة',
+  SEO: 'توجيهات لمختص SEO',
 };
-
 // ── Consistent date+time formatter ───────────────────────────
 function fmtDate(d: string | Date | null | undefined): string {
   if (!d) return '—';
@@ -69,6 +71,7 @@ const AUDIT_LABELS: Record<string,string> = {
   AM_APPROVED_DEVELOPMENT: 'موافقة مدير الحساب',
   AM_APPROVED_DELIVERED: 'موافقة نهائية وتسليم',
   AM_REQUESTED_REVISION: 'طلب تعديل من مدير الحساب',
+  EMERGENCY_TRANSFER: '⚠️ تحويل طوارئ',
 };
 
 interface Props {
@@ -81,14 +84,397 @@ interface Props {
   onRefresh: () => void;
 }
 
+// ═══════ INTAKE Section Component ═══════
+function IntakeSection({ ticket, headers, staff, userRole, onRefresh, setErrorModal }: {
+  ticket: any; headers: Record<string, string>; staff: any[]; userRole: string;
+  onRefresh: () => void; setErrorModal: (msg: string | null) => void;
+}) {
+  const [dataRequests, setDataRequests] = useState<any[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [showRequestForm, setShowRequestForm] = useState(false);
+  const [isSendingRequest, setIsSendingRequest] = useState(false);
+  const [isApprovingIntake, setIsApprovingIntake] = useState(false);
+
+  // Document states
+  const [freelanceDocUrl, setFreelanceDocUrl] = useState(ticket.freelanceDocUrl || '');
+  const [commercialRegUrl, setCommercialRegUrl] = useState(ticket.commercialRegUrl || '');
+  const [isUploadingFreelance, setIsUploadingFreelance] = useState(false);
+  const [isUploadingCommercial, setIsUploadingCommercial] = useState(false);
+  const [isSavingDocs, setIsSavingDocs] = useState(false);
+
+  // Transfer states
+  const [selectedSeoId, setSelectedSeoId] = useState(ticket.assignedSeoId || '');
+  const [intakeBrief, setIntakeBrief] = useState(ticket.intakeBrief || '');
+  const [isTransferring, setIsTransferring] = useState(false);
+  const [customSlaHours, setCustomSlaHours] = useState('');
+
+  const hasAtLeastOneDoc = !!(freelanceDocUrl || commercialRegUrl || ticket.freelanceDocUrl || ticket.commercialRegUrl);
+  const staffList = staff.filter((s: any) => s.role === 'SEO' && s.isActive);
+
+  // Fetch data requests
+  useEffect(() => {
+    const fetchDataRequests = async () => {
+      try {
+        const res = await fetch(`${API}/api/tickets/${ticket.id}/data-requests`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          setDataRequests(data);
+        }
+      } catch {}
+    };
+    fetchDataRequests();
+  }, [ticket.id]);
+
+  const sendDataRequest = async () => {
+    if (!newMessage.trim()) return;
+    setIsSendingRequest(true);
+    try {
+      const res = await fetch(`${API}/api/tickets/${ticket.id}/data-request`, {
+        method: 'POST', headers, body: JSON.stringify({ message: newMessage }),
+      });
+      if (res.ok) {
+        const dr = await res.json();
+        setDataRequests(prev => [...prev, dr]);
+        setNewMessage('');
+        setShowRequestForm(false);
+      } else {
+        const err = await res.json();
+        setErrorModal(err.error || 'فشل إرسال الطلب');
+      }
+    } catch { setErrorModal('تعذر الاتصال بالخادم'); }
+    finally { setIsSendingRequest(false); }
+  };
+
+  const approveIntake = async () => {
+    setIsApprovingIntake(true);
+    try {
+      const res = await fetch(`${API}/api/tickets/${ticket.id}/approve-intake`, {
+        method: 'PUT', headers,
+      });
+      if (res.ok) {
+        onRefresh();
+        // Refresh data requests to show resolved status
+        const drRes = await fetch(`${API}/api/tickets/${ticket.id}/data-requests`, { headers });
+        if (drRes.ok) setDataRequests(await drRes.json());
+      } else {
+        const err = await res.json();
+        setErrorModal(err.error || 'فشل الاعتماد');
+      }
+    } catch { setErrorModal('تعذر الاتصال بالخادم'); }
+    finally { setIsApprovingIntake(false); }
+  };
+
+  const uploadFile = async (file: File, setter: (url: string) => void, setUploading: (v: boolean) => void) => {
+    setUploading(true);
+    try {
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve) => {
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+      const fileData = await base64Promise;
+      const res = await fetch(`${API}/api/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: file.name, fileData })
+      });
+      if (res.ok) {
+        const { url } = await res.json();
+        setter(url);
+      }
+    } finally { setUploading(false); }
+  };
+
+  const saveDocuments = async () => {
+    setIsSavingDocs(true);
+    try {
+      const res = await fetch(`${API}/api/tickets/${ticket.id}/upload-documents`, {
+        method: 'PUT', headers,
+        body: JSON.stringify({ freelanceDocUrl, commercialRegUrl }),
+      });
+      if (res.ok) { onRefresh(); }
+      else {
+        const err = await res.json();
+        setErrorModal(err.error || 'فشل حفظ الوثائق');
+      }
+    } catch { setErrorModal('تعذر الاتصال بالخادم'); }
+    finally { setIsSavingDocs(false); }
+  };
+
+  const transferToNextStage = async () => {
+    if (!selectedSeoId) return setErrorModal('يجب اختيار شخص SEO');
+    if (!intakeBrief.trim()) return setErrorModal('يجب كتابة البريف');
+    if (!freelanceDocUrl && !commercialRegUrl && !ticket.freelanceDocUrl && !ticket.commercialRegUrl) {
+      return setErrorModal('يجب رفع وثيقة واحدة على الأقل');
+    }
+
+    setIsTransferring(true);
+    try {
+      const res = await fetch(`${API}/api/tickets/${ticket.id}/stage`, {
+        method: 'PUT', headers,
+        body: JSON.stringify({
+          stage: 'SEO_STORE_SETUP',
+          assignedSeoId: selectedSeoId,
+          intakeBrief: intakeBrief.trim(),
+          customSlaHours: customSlaHours ? Number(customSlaHours) : undefined,
+        }),
+      });
+      if (res.ok) { onRefresh(); }
+      else {
+        const err = await res.json();
+        setErrorModal(err.error || 'فشل التحويل');
+      }
+    } catch { setErrorModal('تعذر الاتصال بالخادم'); }
+    finally { setIsTransferring(false); }
+  };
+
+  return (
+    <>
+      {/* ب- قسم طلب بيانات إضافية */}
+      <section className="space-y-3">
+        <h3 className="text-xs font-bold text-amber-600 uppercase tracking-wider flex items-center gap-2">
+          <MessageSquare className="w-3.5 h-3.5" /> طلب بيانات إضافية
+        </h3>
+        <div className="bg-amber-50/50 rounded-2xl border border-amber-200 p-4 space-y-4">
+          {/* Chat history */}
+          {dataRequests.length > 0 && (
+            <div className="max-h-64 overflow-y-auto space-y-2 p-3 bg-white rounded-xl border border-slate-100">
+              {dataRequests.map((dr: any) => (
+                <div key={dr.id} className={`flex ${dr.fromRole === 'ACCOUNT_MANAGER' ? 'justify-start' : 'justify-end'}`}>
+                  <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
+                    dr.fromRole === 'ACCOUNT_MANAGER'
+                      ? 'bg-blue-50 border border-blue-100 text-blue-900'
+                      : 'bg-slate-100 border border-slate-200 text-slate-800'
+                  }`}>
+                    <p className="text-xs leading-relaxed whitespace-pre-wrap">{dr.message}</p>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-[9px] text-slate-400">
+                        {dr.fromRole === 'ACCOUNT_MANAGER' ? 'مدير الحساب' : 'العميل'}
+                      </span>
+                      <span className="text-[9px] text-slate-400">{fmtDate(dr.createdAt)}</span>
+                      {dr.isResolved && (
+                        <span className="text-[9px] text-emerald-600 font-bold flex items-center gap-0.5">
+                          <CheckCircle2 className="w-2.5 h-2.5" /> معتمد
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Send request form */}
+          {showRequestForm ? (
+            <div className="space-y-2">
+              <textarea
+                value={newMessage}
+                onChange={e => setNewMessage(e.target.value)}
+                placeholder="اكتب ما تحتاجه من العميل..."
+                rows={3}
+                className="w-full text-xs border border-amber-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={sendDataRequest}
+                  disabled={isSendingRequest || !newMessage.trim()}
+                  className="px-4 py-2 bg-amber-600 text-white rounded-xl text-xs font-bold hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  {isSendingRequest ? 'جاري الإرسال...' : 'إرسال الطلب'}
+                </button>
+                <button
+                  onClick={() => { setShowRequestForm(false); setNewMessage(''); }}
+                  className="px-3 py-2 text-slate-500 hover:text-slate-700 text-xs font-bold"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowRequestForm(true)}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
+              >
+                <MessageSquare className="w-3.5 h-3.5" /> طلب بيانات إضافية
+              </button>
+              {dataRequests.some((dr: any) => !dr.isResolved && dr.fromRole === 'CUSTOMER') && (
+                <button
+                  onClick={approveIntake}
+                  disabled={isApprovingIntake}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  {isApprovingIntake ? 'جاري الاعتماد...' : 'اعتماد بيانات العميل'}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ج- قسم الوثائق الرسمية */}
+      <section className="space-y-3">
+        <h3 className="text-xs font-bold text-sky-600 uppercase tracking-wider flex items-center gap-2">
+          <FileText className="w-3.5 h-3.5" /> الوثائق الرسمية
+        </h3>
+        <div className="bg-sky-50/50 rounded-2xl border border-sky-200 p-4 space-y-4">
+          {/* Freelance Doc */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-700 flex items-center gap-2">
+              وثيقة العمل الحر
+              {(freelanceDocUrl || ticket.freelanceDocUrl) && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                  <CheckCircle2 className="w-3 h-3" /> تم الرفع
+                </span>
+              )}
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={freelanceDocUrl}
+                onChange={e => setFreelanceDocUrl(e.target.value)}
+                placeholder="رابط الوثيقة أو ارفع ملف"
+                className="flex-1 text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-sky-300"
+              />
+              <label className="cursor-pointer bg-slate-900 text-white px-3 py-2 rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors whitespace-nowrap">
+                {isUploadingFreelance ? 'جاري الرفع...' : 'رفع ملف'}
+                <input type="file" accept=".pdf,image/*" className="hidden"
+                  onChange={e => e.target.files?.[0] && uploadFile(e.target.files[0], setFreelanceDocUrl, setIsUploadingFreelance)}
+                  disabled={isUploadingFreelance} />
+              </label>
+            </div>
+            {normalizeUrl(freelanceDocUrl) && (
+              <a href={normalizeUrl(freelanceDocUrl)!} target="_blank" rel="noreferrer"
+                className="text-[10px] text-blue-600 underline flex items-center gap-1">
+                <ExternalLink className="w-3 h-3" /> عرض الوثيقة
+              </a>
+            )}
+          </div>
+
+          {/* Commercial Registration */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-700 flex items-center gap-2">
+              السجل التجاري
+              {(commercialRegUrl || ticket.commercialRegUrl) && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                  <CheckCircle2 className="w-3 h-3" /> تم الرفع
+                </span>
+              )}
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={commercialRegUrl}
+                onChange={e => setCommercialRegUrl(e.target.value)}
+                placeholder="رابط السجل أو ارفع ملف"
+                className="flex-1 text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-sky-300"
+              />
+              <label className="cursor-pointer bg-slate-900 text-white px-3 py-2 rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors whitespace-nowrap">
+                {isUploadingCommercial ? 'جاري الرفع...' : 'رفع ملف'}
+                <input type="file" accept=".pdf,image/*" className="hidden"
+                  onChange={e => e.target.files?.[0] && uploadFile(e.target.files[0], setCommercialRegUrl, setIsUploadingCommercial)}
+                  disabled={isUploadingCommercial} />
+              </label>
+            </div>
+            {normalizeUrl(commercialRegUrl) && (
+              <a href={normalizeUrl(commercialRegUrl)!} target="_blank" rel="noreferrer"
+                className="text-[10px] text-blue-600 underline flex items-center gap-1">
+                <ExternalLink className="w-3 h-3" /> عرض السجل
+              </a>
+            )}
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <button onClick={saveDocuments} disabled={isSavingDocs}
+              className="px-4 py-2 bg-sky-600 text-white rounded-xl text-xs font-bold hover:bg-sky-700 transition-colors disabled:opacity-50">
+              {isSavingDocs ? 'جاري الحفظ...' : 'حفظ الوثائق'}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* د- قسم تحويل الطلب */}
+      {hasAtLeastOneDoc && (
+        <section className="space-y-3">
+          <h3 className="text-xs font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-2">
+            <ArrowRight className="w-3.5 h-3.5" /> تحويل الطلب للمرحلة التالية
+          </h3>
+          <div className="bg-emerald-50/50 rounded-2xl border border-emerald-200 p-4 space-y-4">
+            {/* SEO Person selector */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5" /> اختيار مختص SEO
+              </label>
+              <select
+                value={selectedSeoId}
+                onChange={e => setSelectedSeoId(e.target.value)}
+                className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300"
+              >
+                <option value="">اختر مختص SEO...</option>
+                {staffList.map((s: any) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} - {ROLE_LABELS[s.role] || s.role}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Brief textarea */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-700">البريف (ملخص الطلب)</label>
+              <textarea
+                value={intakeBrief}
+                onChange={e => setIntakeBrief(e.target.value)}
+                placeholder="اكتب ملخصاً شاملاً عن الطلب وما يجب الانتباه له..."
+                rows={4}
+                className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300 resize-none"
+              />
+            </div>
+
+            {/* Custom SLA */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5" /> SLA مخصص (بالساعات)
+              </label>
+              <input
+                type="number"
+                min={1}
+                value={customSlaHours}
+                onChange={e => setCustomSlaHours(e.target.value)}
+                placeholder="اتركه فارغاً لاستخدام الافتراضي (168 ساعة)"
+                className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                dir="ltr"
+              />
+            </div>
+
+            {/* Transfer button */}
+            <button
+              onClick={transferToNextStage}
+              disabled={isTransferring || !selectedSeoId || !intakeBrief.trim()}
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isTransferring ? (
+                <><Clock className="w-4 h-4 animate-spin" /> جاري التحويل...</>
+              ) : (
+                <><ArrowRight className="w-4 h-4" /> تحويل للمرحلة التالية (إعدادات SEO)</>
+              )}
+            </button>
+          </div>
+        </section>
+      )}
+    </>
+  );
+}
+
+
+
 export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, onClose, onRefresh }: Props) {
   const [checklist, setChecklist] = useState<any[]>([]);
   const [notes, setNotes] = useState(ticket.staffNotes || '');
   const [assets, setAssets] = useState(ticket.assetsUrl || '');
-  const [slaInput, setSlaInput] = useState<string>(ticket.customSlaHours?.toString() || '');
-  const [roleInstructions, setRoleInstructions] = useState<Record<string, string>>({});
-  const [selectedAssigneeIds, setSelectedAssigneeIds] = useState<string[]>([]);
-  const [pickerId, setPickerId] = useState<string>('');
+
 
   // Legal Processing states
   const [legalDocUrl, setLegalDocUrl] = useState('');
@@ -126,25 +512,23 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
   const [amReviewError, setAmReviewError]     = useState<string | null>(null);
   const [amReviewSuccess, setAmReviewSuccess] = useState<string | null>(null);
 
+  // Emergency Transfer state (ADMIN only)
+  const [emergencyStage, setEmergencyStage] = useState('');
+  const [emergencyReason, setEmergencyReason] = useState('');
+  const [isEmergencyTransferring, setIsEmergencyTransferring] = useState(false);
+  const [emergencyError, setEmergencyError] = useState<string | null>(null);
+
   // Document approval state (ADMIN / ACCOUNT_MANAGER only)
   const [isApprovingDocs, setIsApprovingDocs] = useState(false);
   const [docsApproved, setDocsApproved]       = useState<boolean>(ticket.client?.docsApproved ?? false);
+
+  // Logo type image
+  const [logoTypeImageUrl, setLogoTypeImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
     try { setChecklist(JSON.parse(ticket.checklists || '[]')); } catch { setChecklist([]); }
     setNotes(ticket.staffNotes || '');
     setAssets(ticket.assetsUrl || '');
-    setSlaInput(ticket.customSlaHours?.toString() || '');
-    setRoleInstructions({
-      ACCOUNT_MANAGER: ticket.amInstructions || '',
-      DESIGNER: ticket.designerInstructions || '',
-      DEVELOPER: ticket.developerInstructions || '',
-      QA: ticket.qaInstructions || '',
-    });
-    setSelectedAssigneeIds(
-      [ticket.accountManagerId, ticket.designerId, ticket.developerId, ticket.qaId].filter(Boolean)
-    );
-    setPickerId('');
 
     // Init legal states
     setLegalDocUrl(ticket.client?.documentFileUrl || ticket.client?.legalDocUrl || '');
@@ -161,52 +545,30 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
       setDesignBanners(ticket.designBannersUrl ? [ticket.designBannersUrl] : []);
     }
     setDesignCategoriesUrl(ticket.designCategoriesUrl || '');
+
+    // Fetch logo type image
+    if (ticket.aiProposal?.selectedLogoType) {
+      fetch(`${API}/api/logo-types`, { headers }).then(r => r.json()).then((types: any[]) => {
+        const match = types.find((t: any) => t.id === ticket.aiProposal.selectedLogoType);
+        if (match?.imageUrl) setLogoTypeImageUrl(match.imageUrl);
+      }).catch(() => {});
+    }
   }, [ticket]);
 
   const cfg = STAGE_CONFIG[ticket.stage] || STAGE_CONFIG.INTAKE;
 
-  const changeStage = async (stage: string) => {
-    const res = await fetch(`${API}/api/tickets/${ticket.id}/stage`, {
-      method: 'PUT', headers, body: JSON.stringify({ stage }),
-    });
-    if (res.ok) onRefresh();
-    else { const err = await res.json(); setErrorModal(err.error || 'فشل'); }
-  };
 
-  const saveAssignmentBundle = async () => {
-    const selectedUsers = selectedAssigneeIds
-      .map((id) => staff.find((s: any) => s.id === id))
-      .filter(Boolean);
-
-    const payload: Record<string, any> = {
-      accountManagerId: selectedUsers.find((u: any) => u.role === 'ACCOUNT_MANAGER')?.id || null,
-      designerId: selectedUsers.find((u: any) => u.role === 'DESIGNER')?.id || null,
-      developerId: selectedUsers.find((u: any) => u.role === 'DEVELOPER')?.id || null,
-      qaId: selectedUsers.find((u: any) => u.role === 'QA')?.id || null,
-      customSlaHours: slaInput ? parseInt(slaInput) : null,
-      amInstructions: roleInstructions.ACCOUNT_MANAGER?.trim() || null,
-      designerInstructions: roleInstructions.DESIGNER?.trim() || null,
-      developerInstructions: roleInstructions.DEVELOPER?.trim() || null,
-      qaInstructions: roleInstructions.QA?.trim() || null,
-    };
-
-    const res = await fetch(`${API}/api/staff/tickets/${ticket.id}/assign`, {
-      method: 'PUT', headers, body: JSON.stringify(payload),
-    });
-    if (res.ok) onRefresh();
-    else {
-      const err = await res.json().catch(() => ({}));
-      setErrorModal(err.error || 'فشل حفظ التعيين');
-    }
-  };
+  const { showToast } = useToast();
 
   const togglePassword = async () => {
     await fetch(`${API}/api/staff/tickets/${ticket.id}/toggle-password`, { method: 'PUT', headers });
+    showToast(ticket.amPasswordVisibility ? 'تم إخفاء كلمة المرور' : 'تم تفعيل كلمة المرور للمطورين');
     onRefresh();
   };
 
   const acceptTask = async () => {
     await fetch(`${API}/api/staff/tickets/${ticket.id}/accept`, { method: 'PUT', headers });
+    showToast('تم قبول المهمة بنجاح ✅');
     onRefresh();
   };
 
@@ -214,6 +576,7 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
     await fetch(`${API}/api/staff/tickets/${ticket.id}/notes`, {
       method: 'PUT', headers, body: JSON.stringify({ staffNotes: notes, assetsUrl: assets }),
     });
+    showToast('تم حفظ الملاحظات بنجاح ✅');
     onRefresh();
   };
 
@@ -477,19 +840,7 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
     ticket.accountManagerId === userId ||
     ticket.designerId === userId ||
     ticket.developerId === userId ||
-    ticket.qaId === userId;
-  const assignableStaff = useMemo(
-    () => staff.filter((s: any) => ASSIGNABLE_ROLES.includes(s.role) && s.isActive),
-    [staff]
-  );
-  const selectedAssignees = useMemo(
-    () => selectedAssigneeIds.map((id) => assignableStaff.find((s: any) => s.id === id)).filter(Boolean),
-    [assignableStaff, selectedAssigneeIds]
-  );
-  const selectedRoles = useMemo(
-    () => Array.from(new Set(selectedAssignees.map((u: any) => u.role))),
-    [selectedAssignees]
-  );
+    ticket.seoSpecialistId === userId;
 
   // Parse colors once
   let brandColors: string[] = [];
@@ -549,7 +900,10 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
             <div className="flex-1">
               <p className={`text-xs font-bold ${ticket.slaBreached ? 'text-red-700' : 'text-slate-600'}`}>
                 {ticket.slaBreached ? '⚠️ تجاوز الـ SLA' : `متبقي: ${ticket.slaRemainingHours}h`}
-                {ticket.customSlaHours && <span className="text-[10px] font-normal mr-2">(SLA مخصص: {ticket.customSlaHours}h)</span>}
+                {ticket.customSlaHours
+                  ? <span className="text-[10px] font-normal mr-2">(SLA مخصص: {ticket.customSlaHours} ساعة)</span>
+                  : <span className="text-[10px] font-normal mr-2">(SLA افتراضي)</span>
+                }
               </p>
               <p className="text-[10px] text-slate-400">دخل المرحلة: {fmtDate(ticket.stageEnteredAt)}</p>
               {ticket.staffAcceptedAt && <p className="text-[10px] text-emerald-600">✓ تم القبول: {fmtDate(ticket.staffAcceptedAt)}</p>}
@@ -558,7 +912,7 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
 
           {/* Accept Task */}
           {isAssignedToMe && !ticket.staffAcceptedAt && (
-            <button onClick={acceptTask} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2">
+            <button onClick={acceptTask} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer">
               <CheckSquare className="w-4 h-4" /> قبول المهمة
             </button>
           )}
@@ -568,7 +922,7 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
               { role: 'ACCOUNT_MANAGER', text: ticket.amInstructions },
               { role: 'DESIGNER', text: ticket.designerInstructions },
               { role: 'DEVELOPER', text: ticket.developerInstructions },
-              { role: 'QA', text: ticket.qaInstructions },
+              { role: 'SEO', text: ticket.seoInstructions },
             ];
             const visibleInstructions = userRole === 'ADMIN'
               ? allInstructions.filter((x) => x.text)
@@ -587,102 +941,15 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
             );
           })()}
 
-          {/* Stage Transition */}
-          {canChangeStage(userRole) && (
-            <section className="space-y-3">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">تغيير المرحلة</h3>
-              <div className="flex flex-wrap gap-2">
-                {STAGES_ORDER.map(s => (
-                  <button key={s} onClick={() => changeStage(s)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${ticket.stage === s ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}`}>
-                    {STAGE_CONFIG[s].label}
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
+          {/* ══════════ INTAKE STAGE — AM Tools ══════════ */}
+          {ticket.stage === 'INTAKE' && ['ADMIN', 'ACCOUNT_MANAGER'].includes(userRole) && (() => {
+            // INTAKE management states are declared inside the IIFE to avoid conditional hook rules
+            return <IntakeSection ticket={ticket} headers={headers} staff={staff} userRole={userRole} onRefresh={onRefresh} setErrorModal={setErrorModal} />;
+          })()}
 
-          {/* Assignment + SLA + Admin Instructions */}
-          {canAssign(userRole) && (
-            <section className="space-y-3">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">تعيين الفريق</h3>
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <select
-                    value={pickerId}
-                    onChange={(e) => setPickerId(e.target.value)}
-                    className="flex-1 text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                  >
-                    <option value="">اختر عضو لإضافته</option>
-                    {assignableStaff
-                      .filter((s: any) => !selectedAssigneeIds.includes(s.id))
-                      .map((s: any) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} - {ROLE_LABELS[s.role] || s.role}
-                        </option>
-                      ))}
-                  </select>
-                  <button
-                    onClick={() => {
-                      if (!pickerId || selectedAssigneeIds.includes(pickerId)) return;
-                      setSelectedAssigneeIds((prev) => [...prev, pickerId]);
-                      setPickerId('');
-                    }}
-                    className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-700 transition-colors"
-                  >
-                    إضافة
-                  </button>
-                </div>
 
-                <div className="flex flex-wrap gap-2">
-                  {selectedAssignees.length === 0 && (
-                    <span className="text-[11px] text-slate-400">لا يوجد أعضاء محددين</span>
-                  )}
-                  {selectedAssignees.map((user: any) => (
-                    <span
-                      key={user.id}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border bg-indigo-50 border-indigo-200 text-indigo-700"
-                    >
-                      {user.name} - {ROLE_LABELS[user.role] || user.role}
-                      <button
-                        onClick={() => setSelectedAssigneeIds((prev) => prev.filter((id) => id !== user.id))}
-                        className="text-indigo-500 hover:text-red-500"
-                        aria-label="remove"
-                      >
-                        <XCircle className="w-3.5 h-3.5" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
 
-                <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
-                  <span className="text-xs text-slate-500 w-24 shrink-0 flex items-center gap-1"><Timer className="w-3.5 h-3.5" /> SLA (ساعات)</span>
-                  <input type="number" min="1" value={slaInput} onChange={e => setSlaInput(e.target.value)}
-                    placeholder="مثال: 48"
-                    className="flex-1 text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                </div>
 
-                {userRole === 'ADMIN' && selectedRoles.map((role) => (
-                  <div key={role}>
-                    <h4 className="text-xs font-bold text-slate-500 mb-1.5">{INSTRUCTION_LABELS[role] || role}</h4>
-                    <textarea
-                      rows={3}
-                      value={roleInstructions[role] || ''}
-                      onChange={(e) => setRoleInstructions((prev) => ({ ...prev, [role]: e.target.value }))}
-                      placeholder="اكتب توجيهات واضحة لهذا الدور..."
-                      className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
-                    />
-                  </div>
-                ))}
-
-                <div className="flex justify-end">
-                  <button onClick={saveAssignmentBundle} className="px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors shrink-0">
-                    حفظ التعيين والإعدادات
-                  </button>
-                </div>
-              </div>
-            </section>
-          )}
 
           {/* Password Toggle */}
           {canAssign(userRole) && ticket.storeDetails && (
@@ -701,249 +968,19 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
             </section>
           )}
 
-          {/* Legal Processing Form for AM / ADMIN */}
-          {canAssign(userRole) && ticket.stage === 'LEGAL_PROCESSING' && (
-            <section className="space-y-3">
-              <h3 className="text-xs font-bold text-amber-600 uppercase tracking-wider">البيانات القانونية وإعداد المتجر (مدير الحساب)</h3>
-              <div className="bg-amber-50/50 rounded-2xl border border-amber-200 p-4 space-y-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700">وثيقة العمل الحر</label>
-                  <div className="flex items-center gap-2">
-                    <input type="text" value={legalDocUrl} onChange={e => setLegalDocUrl(e.target.value)} placeholder="رابط الوثيقة" className="flex-1 text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-amber-300" />
-                    <label className="cursor-pointer bg-slate-900 text-white px-3 py-2 rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors whitespace-nowrap">
-                      {isUploadingLegal ? 'جاري الرفع...' : 'رفع ملف'}
-                      <input type="file" accept=".pdf,image/*" className="hidden" onChange={e => e.target.files?.[0] && uploadLegalDoc(e.target.files[0])} disabled={isUploadingLegal} />
-                    </label>
-                  </div>
-                  {legalDocUrl && <a href={legalDocUrl} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 underline">عرض الوثيقة الحالية</a>}
-                </div>
 
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700">اسم الدومين</label>
-                  <input type="text" value={domainName} onChange={e => setDomainName(e.target.value)} placeholder="مثال: mystore.com" className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-amber-300" />
-                </div>
 
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700">رابط متجر سلة / زد</label>
-                  <input type="url" value={sallaStoreUrl} onChange={e => setSallaStoreUrl(e.target.value)} placeholder="رابط المتجر" className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-amber-300" />
-                </div>
 
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700">إيميل المتجر</label>
-                  <input type="email" value={storeEmail} onChange={e => setStoreEmail(e.target.value)} placeholder="store@mystore.com" className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-amber-300" />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700">كلمة مرور المتجر</label>
-                  <input type="text" value={storePassword} onChange={e => setStorePassword(e.target.value)} placeholder="أدخل كلمة المرور لتحديثها" className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-amber-300" />
-                  {ticket.storeDetails?.storePasswordEncrypted && <p className="text-[10px] text-slate-400">ملاحظة: المتجر لديه كلمة مرور محفوظة بالفعل. أدخل لتحديثها.</p>}
-                </div>
-
-                <div className="flex justify-end pt-2">
-                  <button onClick={saveLegalData} disabled={isSavingLegal} className="px-4 py-2 bg-amber-600 text-white rounded-xl text-xs font-bold hover:bg-amber-700 transition-colors">
-                    {isSavingLegal ? 'جاري الحفظ...' : 'حفظ البيانات القانونية'}
-                  </button>
-                </div>
-              </div>
-            </section>
-          )}
-
-          {/* Design Files Form for Designer */}
-          {(userRole === 'DESIGNER' || userRole === 'ADMIN') && ['DESIGN', 'CLIENT_REVISION'].includes(ticket.stage) && (
-            <section className="space-y-3">
-              <h3 className="text-xs font-bold text-violet-600 uppercase tracking-wider">ملفات التصميم للعميل</h3>
-              <div className="bg-violet-50/50 rounded-2xl border border-violet-200 p-4 space-y-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700">شعار المتجر</label>
-                  <div className="flex items-center gap-2">
-                    <input type="text" value={designLogoUrl} onChange={e => setDesignLogoUrl(e.target.value)} placeholder="رابط الملف / مجلد درايف" className="flex-1 text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-violet-300" />
-                    <label className="cursor-pointer bg-slate-900 text-white px-3 py-2 rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors whitespace-nowrap">
-                      {isUploadingDesign ? 'جاري الرفع...' : 'رفع ملف'}
-                      <input type="file" accept="image/*,.pdf,.zip" className="hidden" onChange={e => e.target.files?.[0] && uploadDesignFile(e.target.files[0], setDesignLogoUrl)} disabled={isUploadingDesign} />
-                    </label>
-                    <button onClick={() => setDesignLogoUrl('')} className="text-red-500 hover:text-red-700 bg-red-50 p-2 rounded-xl" title="إلغاء الملف">
-                      <XCircle className="w-4 h-4" />
-                    </button>
-                  </div>
-                  {designLogoUrl && <a href={designLogoUrl} target="_blank" rel="noreferrer" className="text-[10px] text-violet-600 underline">عرض الملف المرفق</a>}
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700">البنرات</label>
-                  {designBanners.map((banner, idx) => (
-                    <div key={idx} className="flex items-center gap-2 mb-2">
-                      <input type="text" value={banner} onChange={e => { const nb = [...designBanners]; nb[idx] = e.target.value; setDesignBanners(nb); }} placeholder="رابط البنر" className="flex-1 text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-violet-300" />
-                      <label className="cursor-pointer bg-slate-900 text-white px-3 py-2 rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors whitespace-nowrap">
-                        رفع
-                        <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && uploadDesignFile(e.target.files[0], url => { const nb = [...designBanners]; nb[idx] = url; setDesignBanners(nb); })} disabled={isUploadingDesign} />
-                      </label>
-                      <button onClick={() => setDesignBanners(designBanners.filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-700 bg-red-50 p-2 rounded-xl">
-                        <XCircle className="w-4 h-4" />
-                      </button>
-                      {banner && <a href={banner} target="_blank" rel="noreferrer" className="text-[10px] text-violet-600 underline shrink-0 w-12 text-center">عرض</a>}
-                    </div>
-                  ))}
-                  <button onClick={() => setDesignBanners([...designBanners, ''])} className="text-xs font-bold text-violet-600 hover:text-violet-700 flex items-center gap-1 bg-violet-50 px-3 py-1.5 rounded-lg border border-violet-100">
-                    <span className="text-lg leading-none mb-0.5">+</span> إضافة بنر آخر
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700">صور الأقسام <span className="text-slate-400 font-normal">(اختياري)</span></label>
-                  <div className="flex items-center gap-2">
-                    <input type="text" value={designCategoriesUrl} onChange={e => setDesignCategoriesUrl(e.target.value)} placeholder="رابط الملف / مجلد درايف" className="flex-1 text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-violet-300" />
-                    <label className="cursor-pointer bg-slate-900 text-white px-3 py-2 rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors whitespace-nowrap">
-                      {isUploadingDesign ? 'جاري الرفع...' : 'رفع ملف'}
-                      <input type="file" accept="image/*,.pdf,.zip" className="hidden" onChange={e => e.target.files?.[0] && uploadDesignFile(e.target.files[0], setDesignCategoriesUrl)} disabled={isUploadingDesign} />
-                    </label>
-                    <button onClick={() => setDesignCategoriesUrl('')} className="text-red-500 hover:text-red-700 bg-red-50 p-2 rounded-xl" title="إلغاء الملف">
-                      <XCircle className="w-4 h-4" />
-                    </button>
-                  </div>
-                  {designCategoriesUrl && <a href={designCategoriesUrl} target="_blank" rel="noreferrer" className="text-[10px] text-violet-600 underline">عرض الملف المرفق</a>}
-                </div>
-                <div className="flex justify-end pt-2">
-                  <button onClick={saveDesignFiles} disabled={isSavingDesign} className="px-4 py-2 bg-violet-600 text-white rounded-xl text-xs font-bold hover:bg-violet-700 transition-colors">
-                    {isSavingDesign ? 'جاري الحفظ...' : 'حفظ ملفات التصميم'}
-                  </button>
-                </div>
-
-                {/* Submit to Client for Approval */}
-                {(ticket.stage === 'DESIGN' || ticket.stage === 'CLIENT_REVISION') && ticket.designLogoUrl && (
-                  <div className="pt-3 border-t border-violet-100">
-                    {designerActionSuccess && (
-                      <div className="mb-3 flex items-center gap-2 p-3 bg-emerald-50 rounded-xl border border-emerald-100">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                        <p className="text-xs text-emerald-700 font-bold">{designerActionSuccess}</p>
-                      </div>
-                    )}
-                    {designerActionError && (
-                      <div className="mb-3 flex items-center gap-2 p-3 bg-red-50 rounded-xl border border-red-100">
-                        <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-                        <p className="text-xs text-red-700">{designerActionError}</p>
-                      </div>
-                    )}
-                    <button
-                      onClick={submitForApproval}
-                      disabled={isSubmittingApproval}
-                      className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
-                    >
-                      {isSubmittingApproval ? (
-                        <span className="animate-spin">⏳</span>
-                      ) : (
-                        <Send className="w-4 h-4" />
-                      )}
-                      {isSubmittingApproval ? 'جاري الإرسال...' : '📤 إرسال التصاميم للعميل للاعتماد'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </section>
-          )}
-
-          {/* CLIENT_REVISION — Show client feedback to designer */}
-          {ticket.stage === 'CLIENT_REVISION' && (userRole === 'DESIGNER' || userRole === 'ADMIN') && (
-            <section className="space-y-3">
-              <h3 className="text-xs font-bold text-red-600 uppercase tracking-wider flex items-center gap-2">
-                <AlertCircle className="w-3.5 h-3.5" /> طلب تعديل من العميل
-              </h3>
-              <div className="bg-red-50/60 rounded-2xl border border-red-200 p-4 space-y-3">
-                <p className="text-xs text-red-800 font-bold">الحالة: العميل طلب تعديلات على التصاميم</p>
-                {ticket.staffNotes && (() => {
-                  const match = ticket.staffNotes.match(/--- تعليق العميل \(طلب تعديل تصميم\) ---\n([\s\S]*?)(?=$|\n---)/g);
-                  const comments = match ? match.map((m: string) => m.replace(/--- تعليق العميل \(طلب تعديل تصميم\) ---\n/, '').trim()) : [];
-                  return comments.length > 0 ? (
-                    <div className="space-y-2">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">ملاحظات العميل:</p>
-                      {comments.map((c: string, i: number) => (
-                        <div key={i} className="p-3 bg-white rounded-xl border border-red-200 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">
-                          {c}
-                        </div>
-                      ))}
-                    </div>
-                  ) : null;
-                })()}
-                <p className="text-[11px] text-red-700">يرجى تنفيذ التعديلات المطلوبة، ثم تحديث ملفات التصميم في القسم أعلاه، وبعدها أرسل التصاميم للعميل مجدداً.</p>
-              </div>
-            </section>
-          )}
-
-          {/* CLIENT_APPROVED — Designer assigns developer and moves to DEVELOPMENT */}
-          {ticket.stage === 'CLIENT_APPROVED' && (userRole === 'DESIGNER' || userRole === 'ADMIN') && (
-            <section className="space-y-3">
-              <h3 className="text-xs font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5" /> التصاميم معتمدة من العميل
-              </h3>
-              <div className="bg-emerald-50/60 rounded-2xl border border-emerald-200 p-4 space-y-4">
-                <div className="flex items-center gap-3 p-3 bg-emerald-100 rounded-xl">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                  <div>
-                    <p className="text-xs font-bold text-emerald-800">اعتمد العميل التصاميم بنجاح ✅</p>
-                    <p className="text-[11px] text-emerald-700 mt-0.5">الخطوة التالية: تعيين مطوّر من فريق البرمجة ثم تحويل الطلب للتطوير</p>
-                  </div>
-                </div>
-
-                {/* Developer assignment status */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-slate-500" />
-                    <span className="text-xs font-bold text-slate-700">المطوّر المعيّن:</span>
-                    {ticket.developer ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-blue-50 border border-blue-200 text-blue-700">
-                        ✓ {ticket.developer.name}
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-50 border border-amber-200 text-amber-700">
-                        ⚠️ لم يُعيَّن بعد
-                      </span>
-                    )}
-                  </div>
-                  {!ticket.developer && (
-                    <p className="text-[11px] text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-100">
-                      يرجى تعيين مطوّر من قسم "تعيين الفريق" أعلاه، ثم العودة هنا للتحويل للتطوير.
-                    </p>
-                  )}
-                </div>
-
-                {designerActionSuccess && (
-                  <div className="flex items-center gap-2 p-3 bg-emerald-50 rounded-xl border border-emerald-100">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <p className="text-xs text-emerald-700 font-bold">{designerActionSuccess}</p>
-                  </div>
-                )}
-                {designerActionError && (
-                  <div className="flex items-center gap-2 p-3 bg-red-50 rounded-xl border border-red-100">
-                    <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-                    <p className="text-xs text-red-700">{designerActionError}</p>
-                  </div>
-                )}
-
-                <button
-                  onClick={moveToDevelopment}
-                  disabled={isMovingToDev || !ticket.developerId}
-                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isMovingToDev ? (
-                    <span className="animate-spin">⏳</span>
-                  ) : (
-                    <ArrowRight className="w-4 h-4" />
-                  )}
-                  {isMovingToDev ? 'جاري التحويل...' : '🚀 تحويل الطلب إلى التطوير'}
-                </button>
-              </div>
-            </section>
-          )}
-
-          {/* Display Design Files for others (AM, ADMIN, QA, etc) if they exist */}
+          {/* Display Design Files for others (AM, ADMIN, SEO, etc) if they exist */}
           {(ticket.designLogoUrl || ticket.designBannersUrl || ticket.designCategoriesUrl) && (
 
             <section className="space-y-3">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">التصاميم المعتمدة</h3>
               <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {ticket.designLogoUrl && (
+                {normalizeUrl(ticket.designLogoUrl) && (
                   <div className="space-y-1.5">
                     <span className="text-[10px] text-slate-400">شعار المتجر</span>
-                    <a href={ticket.designLogoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-3 bg-white rounded-xl border border-slate-200 hover:border-violet-300 transition-colors group">
+                    <a href={normalizeUrl(ticket.designLogoUrl)!} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-3 bg-white rounded-xl border border-slate-200 hover:border-violet-300 transition-colors group">
                       <Palette className="w-5 h-5 text-violet-400 group-hover:text-violet-600" />
                       <span className="text-xs font-bold text-slate-700 group-hover:text-violet-700 truncate flex-1">استعراض الملف</span>
                       <ExternalLink className="w-3 h-3 text-slate-400" />
@@ -954,22 +991,25 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
                 {(() => {
                   let banners: string[] = [];
                   try { banners = JSON.parse(ticket.designBannersUrl || '[]'); } catch { banners = ticket.designBannersUrl ? [ticket.designBannersUrl] : []; }
-                  return banners.map((b, idx) => b ? (
+                  return banners.map((b, idx) => {
+                    const bannerUrl = normalizeUrl(b);
+                    return bannerUrl ? (
                     <div key={`banner-${idx}`} className="space-y-1.5">
                       <span className="text-[10px] text-slate-400">البنرات {banners.length > 1 ? `(${idx + 1})` : ''}</span>
-                      <a href={b} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-3 bg-white rounded-xl border border-slate-200 hover:border-violet-300 transition-colors group">
+                      <a href={bannerUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-3 bg-white rounded-xl border border-slate-200 hover:border-violet-300 transition-colors group">
                         <Palette className="w-5 h-5 text-violet-400 group-hover:text-violet-600" />
                         <span className="text-xs font-bold text-slate-700 group-hover:text-violet-700 truncate flex-1">استعراض الملف</span>
                         <ExternalLink className="w-3 h-3 text-slate-400" />
                       </a>
                     </div>
-                  ) : null);
+                  ) : null;
+                  });
                 })()}
 
-                {ticket.designCategoriesUrl && (
+                {normalizeUrl(ticket.designCategoriesUrl) && (
                   <div className="space-y-1.5">
                     <span className="text-[10px] text-slate-400">صور الأقسام</span>
-                    <a href={ticket.designCategoriesUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-3 bg-white rounded-xl border border-slate-200 hover:border-violet-300 transition-colors group">
+                    <a href={normalizeUrl(ticket.designCategoriesUrl)!} target="_blank" rel="noreferrer" className="flex items-center gap-2 p-3 bg-white rounded-xl border border-slate-200 hover:border-violet-300 transition-colors group">
                       <Palette className="w-5 h-5 text-violet-400 group-hover:text-violet-600" />
                       <span className="text-xs font-bold text-slate-700 group-hover:text-violet-700 truncate flex-1">استعراض الملف</span>
                       <ExternalLink className="w-3 h-3 text-slate-400" />
@@ -989,7 +1029,7 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
                   <Globe className="w-4 h-4 text-slate-400 shrink-0" />
                   <span className="text-[10px] text-slate-400 w-16 shrink-0">الرابط</span>
                   {ticket.storeDetails.sallaStoreUrl
-                    ? <a href={ticket.storeDetails.sallaStoreUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline flex items-center gap-1 truncate">{ticket.storeDetails.sallaStoreUrl} <ExternalLink className="w-3 h-3 shrink-0" /></a>
+                    ? <a href={ensureUrl(ticket.storeDetails.sallaStoreUrl)} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline flex items-center gap-1 truncate">{ticket.storeDetails.sallaStoreUrl} <ExternalLink className="w-3 h-3 shrink-0" /></a>
                     : <span className="text-xs text-slate-400">—</span>}
                 </div>
                 <div className="flex items-center gap-3 px-4 py-3">
@@ -1070,8 +1110,8 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
                 </div>
 
                 {/* Has legal doc → show link */}
-                {hasDoc && docUrl && (
-                  <a href={docUrl} target="_blank" rel="noreferrer"
+                {hasDoc && normalizeUrl(docUrl) && (
+                  <a href={normalizeUrl(docUrl)!} target="_blank" rel="noreferrer"
                     className="flex items-center gap-3 p-3 bg-blue-50 rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors">
                     <FileText className="w-5 h-5 text-blue-600 shrink-0" />
                     <div className="flex-1 min-w-0">
@@ -1096,8 +1136,8 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
                       </div>
                     ) : null)}
 
-                    {idUrl && (
-                      <a href={idUrl} target="_blank" rel="noreferrer"
+                    {normalizeUrl(idUrl) && (
+                      <a href={normalizeUrl(idUrl)!} target="_blank" rel="noreferrer"
                         className="flex items-center gap-2 p-2 bg-white rounded-lg border border-amber-200 hover:bg-amber-50 transition-colors mt-1">
                         <FileText className="w-4 h-4 text-amber-600 shrink-0" />
                         <div className="flex-1 min-w-0">
@@ -1149,6 +1189,15 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
                   <div><span className="text-[10px] text-slate-400 block mb-1">نبرة الصوت</span><p className="text-xs text-slate-700">{ticket.aiProposal.brandVoice}</p></div>
                 )}
                 {/* Colors with hex codes */}
+                {ticket.aiProposal.selectedLogoTypeName && (
+                  <div>
+                    <span className="text-[10px] text-slate-400 block mb-1">نوع الشعار المفضل</span>
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-violet-50 border border-violet-200">
+                      {logoTypeImageUrl && <img src={logoTypeImageUrl} alt="" className="w-8 h-8 rounded-md object-contain bg-slate-900 p-0.5" />}
+                      <span className="text-xs font-bold text-violet-700">🎨 {ticket.aiProposal.selectedLogoTypeName}</span>
+                    </div>
+                  </div>
+                )}
                 {brandColors.length > 0 && (
                   <div>
                     <span className="text-[10px] text-slate-400 block mb-2">الألوان</span>
@@ -1163,12 +1212,12 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
                   </div>
                 )}
                 {/* Logo */}
-                {ticket.aiProposal.generatedLogoUrl && (
+                {normalizeUrl(ticket.aiProposal.generatedLogoUrl) && (
                   <div>
                     <span className="text-[10px] text-slate-400 block mb-2">الشعار</span>
                     <div className="flex items-center gap-3">
-                      <img src={ticket.aiProposal.generatedLogoUrl} alt="logo" className="w-16 h-16 object-contain rounded-xl border bg-white p-2" />
-                      <a href={ticket.aiProposal.generatedLogoUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 flex items-center gap-1 hover:underline"><Download className="w-3.5 h-3.5" /> عرض / تحميل</a>
+                      <img src={normalizeUrl(ticket.aiProposal.generatedLogoUrl)!} alt="logo" className="w-16 h-16 object-contain rounded-xl border bg-white p-2" />
+                      <a href={normalizeUrl(ticket.aiProposal.generatedLogoUrl)!} target="_blank" rel="noreferrer" className="text-xs text-blue-600 flex items-center gap-1 hover:underline"><Download className="w-3.5 h-3.5" /> عرض / تحميل</a>
                     </div>
                   </div>
                 )}
@@ -1176,17 +1225,21 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
                   <div>
                     <span className="text-[10px] text-slate-400 block mb-2">صور الإلهام المرفوعة</span>
                     <div className="flex flex-wrap gap-2">
-                      {referenceLogos.map((url: string, i: number) => (
+                      {referenceLogos.map((url: string, i: number) => {
+                        const nUrl = normalizeUrl(url);
+                        if (!nUrl) return null;
+                        return (
                         <a
                           key={`${url}-${i}`}
-                          href={url}
+                          href={nUrl}
                           target="_blank"
                           rel="noreferrer"
                           className="block w-20 h-20 rounded-xl border border-slate-200 bg-white p-1 hover:shadow-sm transition-shadow"
                         >
-                          <img src={url} alt={`reference-${i + 1}`} className="w-full h-full object-cover rounded-lg" />
+                          <img src={nUrl} alt={`reference-${i + 1}`} className="w-full h-full object-cover rounded-lg" />
                         </a>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1195,10 +1248,10 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
           )}
 
           {/* Legal Doc Link — Task 3 */}
-          {ticket.client?.legalDocUrl && (
+          {normalizeUrl(ticket.client?.legalDocUrl) && (
             <section className="space-y-3">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">المستندات القانونية</h3>
-              <a href={ticket.client.legalDocUrl} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 bg-blue-50 rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors">
+              <a href={normalizeUrl(ticket.client.legalDocUrl)!} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 bg-blue-50 rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors">
                 <FileText className="w-5 h-5 text-blue-600 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-bold text-blue-800">الوثيقة القانونية</p>
@@ -1221,7 +1274,7 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
               <input value={assets} onChange={e => setAssets(e.target.value)} placeholder="رابط الملفات / التسليمات"
                 className="flex-1 text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300" />
             </div>
-            <button onClick={saveNotes} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors">حفظ الملاحظات</button>
+            <button onClick={saveNotes} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors cursor-pointer">حفظ الملاحظات</button>
           </section>
 
           {/* Checklist */}
@@ -1242,163 +1295,87 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
             </section>
           )}
 
-          {/* ── Developer: Complete Work Section ───────────── */}
-          {['DEVELOPER', 'ADMIN'].includes(userRole) &&
-           ['DEVELOPMENT', 'DEVELOPMENT_REVISION'].includes(ticket.stage) && (
-            <section className="space-y-3">
-              <h3 className="text-xs font-bold text-blue-600 uppercase tracking-wider flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                إنهاء العمل وإرساله للمراجعة
-              </h3>
 
-              {/* Show AM revision notes if in DEVELOPMENT_REVISION */}
-              {ticket.stage === 'DEVELOPMENT_REVISION' && ticket.staffNotes && (
-                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-                  <p className="text-xs font-bold text-amber-800 mb-2 flex items-center gap-1">
-                    <AlertCircle className="w-3.5 h-3.5" /> ملاحظات مدير الحساب
-                  </p>
-                  <p className="text-xs text-amber-700 whitespace-pre-wrap leading-relaxed">
-                    {ticket.staffNotes.split('--- ملاحظات مدير الحساب').slice(-1)[0]?.replace(/\(طلب تعديل تطوير\) ---\n?/, '') || ticket.staffNotes}
-                  </p>
-                </div>
-              )}
-
-              {devCompleteSuccess ? (
-                <div className="flex items-center gap-2 p-4 bg-emerald-50 rounded-2xl border border-emerald-200">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
-                  <p className="text-sm font-bold text-emerald-700">{devCompleteSuccess}</p>
-                </div>
-              ) : (
-                <div className="bg-blue-50/50 border border-blue-200 rounded-2xl p-5 space-y-4">
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    عند الانتهاء من العمل اضغط الزر أدناه لإرسال الطلب لمدير الحساب للمراجعة. 
-                    سيتم إشعاره فوراً ليقوم بالمراجعة والموافقة.
-                  </p>
-                  {devCompleteError && (
-                    <div className="flex items-center gap-2 p-3 bg-red-50 rounded-xl border border-red-100">
-                      <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-                      <p className="text-xs text-red-700">{devCompleteError}</p>
-                    </div>
-                  )}
-                  <button
-                    onClick={completeWork}
-                    disabled={isCompletingWork}
-                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-100 disabled:opacity-60"
-                  >
-                    {isCompletingWork ? (
-                      <><Timer className="w-4 h-4 animate-spin" /> جاري الإرسال...</>
-                    ) : (
-                      <><CheckCircle2 className="w-4 h-4" /> تم الانتهاء — إرسال للمراجعة</>
-                    )}
-                  </button>
-                </div>
-              )}
-            </section>
+          {ticket.stage === 'SEO_STORE_SETUP' && (
+            <SeoStageSection ticket={ticket} headers={headers} staff={staff} userRole={userRole} onRefresh={onRefresh} setErrorModal={setErrorModal} />
           )}
 
-          {/* ── Account Manager: Review Developer Work ──────── */}
-          {['ACCOUNT_MANAGER', 'ADMIN'].includes(userRole) &&
-           ticket.stage === 'PENDING_AM_REVIEW' && (
+          {/* ── DESIGN Stage — Designer Upload / SEO & Client Review ──── */}
+          {ticket.stage === 'DESIGN' && (
+            <DesignSection ticket={ticket} headers={headers} staff={staff} userRole={userRole} onRefresh={onRefresh} setErrorModal={setErrorModal} />
+          )}
+
+          {/* ── DEVELOPMENT Stage — Dev Checklist / SEO Review ─────── */}
+          {ticket.stage === 'DEVELOPMENT' && (
+            <DevSection ticket={ticket} headers={headers} userRole={userRole} onRefresh={onRefresh} setErrorModal={setErrorModal} />
+          )}
+
+          {/* ── SEO_FINAL Stage — Final Checklist / Delivery ────────── */}
+          {ticket.stage === 'SEO_FINAL' && (
+            <SeoFinalSection ticket={ticket} headers={headers} userRole={userRole} onRefresh={onRefresh} setErrorModal={setErrorModal} />
+          )}
+
+          {/* ── Emergency Transfer — ADMIN Only ────────────────── */}
+          {userRole === 'ADMIN' && (
             <section className="space-y-3">
-              <h3 className="text-xs font-bold text-orange-600 uppercase tracking-wider flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
-                مراجعة عمل المطوّر
+              <h3 className="text-xs font-bold text-red-500 uppercase tracking-wider flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5" /> تحويل طوارئ (مدير النظام)
               </h3>
-
-              {amReviewSuccess ? (
-                <div className="flex items-center gap-2 p-4 bg-emerald-50 rounded-2xl border border-emerald-200">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
-                  <p className="text-sm font-bold text-emerald-700">{amReviewSuccess}</p>
-                </div>
-              ) : (
-                <div className="bg-orange-50/50 border border-orange-200 rounded-2xl p-5 space-y-4">
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    أنهى المطوّر عمله وهو بانتظار مراجعتك. يمكنك الموافقة على العمل أو طلب تعديلات.
-                  </p>
-
-                  {/* Action buttons */}
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => { setAmReviewAction('APPROVE'); setAmReviewError(null); }}
-                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-sm border-2 transition-all ${
-                        amReviewAction === 'APPROVE'
-                          ? 'bg-emerald-500 border-emerald-500 text-white shadow-md'
-                          : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
-                      }`}
-                    >
-                      <CheckCircle2 className="w-4 h-4" /> قبول العمل
-                    </button>
-                    <button
-                      onClick={() => { setAmReviewAction('REVISE'); setAmReviewError(null); }}
-                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-sm border-2 transition-all ${
-                        amReviewAction === 'REVISE'
-                          ? 'bg-amber-500 border-amber-500 text-white shadow-md'
-                          : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
-                      }`}
-                    >
-                      <Send className="w-4 h-4" /> طلب تعديل
-                    </button>
+              <div className="bg-slate-50 rounded-2xl border border-red-200/60 p-4 space-y-3">
+                <select
+                  value={emergencyStage}
+                  onChange={e => setEmergencyStage(e.target.value)}
+                  className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-red-300"
+                >
+                  <option value="">اختر المرحلة...</option>
+                  {STAGES_ORDER.filter(s => s !== ticket.stage).map(s => (
+                    <option key={s} value={s}>{STAGE_CONFIG[s].label}</option>
+                  ))}
+                </select>
+                <textarea
+                  value={emergencyReason}
+                  onChange={e => setEmergencyReason(e.target.value)}
+                  placeholder="سبب التحويل الطارئ (مطلوب)..."
+                  rows={2}
+                  className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-red-300 resize-none"
+                />
+                {emergencyError && (
+                  <div className="flex items-center gap-2 p-2 bg-red-50 rounded-lg border border-red-100">
+                    <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                    <p className="text-[11px] text-red-700">{emergencyError}</p>
                   </div>
-
-                  {/* Site URL for approval */}
-                  {amReviewAction === 'APPROVE' && (
-                    <div className="space-y-2 animate-in slide-in-from-top-2 duration-200">
-                      <label className="text-xs font-bold text-slate-700 block flex items-center gap-1">
-                        <Link2 className="w-3 h-3" /> رابط الموقع المُسلَّم <span className="text-slate-400 font-normal">(اختياري)</span>
-                      </label>
-                      <input
-                        type="url"
-                        value={amSiteUrl}
-                        onChange={e => setAmSiteUrl(e.target.value)}
-                        placeholder="https://yourstore.salla.sa"
-                        className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300"
-                        dir="ltr"
-                      />
-                    </div>
-                  )}
-
-                  {/* Feedback for revision */}
-                  {amReviewAction === 'REVISE' && (
-                    <div className="space-y-2 animate-in slide-in-from-top-2 duration-200">
-                      <label className="text-xs font-bold text-slate-700 block">ملاحظات التعديل المطلوبة</label>
-                      <textarea
-                        value={amFeedback}
-                        onChange={e => setAmFeedback(e.target.value)}
-                        placeholder="اذكر بوضوح ما يحتاج تعديله أو تحسينه..."
-                        rows={4}
-                        className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none"
-                      />
-                    </div>
-                  )}
-
-                  {amReviewError && (
-                    <div className="flex items-center gap-2 p-3 bg-red-50 rounded-xl border border-red-100">
-                      <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-                      <p className="text-xs text-red-700">{amReviewError}</p>
-                    </div>
-                  )}
-
-                  {amReviewAction && (
-                    <button
-                      onClick={submitAmReview}
-                      disabled={isAmReviewing}
-                      className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md disabled:opacity-60 ${
-                        amReviewAction === 'APPROVE'
-                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-100'
-                          : 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-100'
-                      }`}
-                    >
-                      {isAmReviewing ? (
-                        <><Timer className="w-4 h-4 animate-spin" /> جاري الإرسال...</>
-                      ) : amReviewAction === 'APPROVE' ? (
-                        <><CheckCircle2 className="w-4 h-4" /> تأكيد الموافقة</>
-                      ) : (
-                        <><Send className="w-4 h-4" /> إرسال ملاحظات التعديل</>
-                      )}
-                    </button>
-                  )}
-                </div>
-              )}
+                )}
+                <button
+                  onClick={async () => {
+                    if (!emergencyStage || !emergencyReason.trim()) return;
+                    setIsEmergencyTransferring(true);
+                    setEmergencyError(null);
+                    try {
+                      const res = await fetch(`${API}/api/tickets/${ticket.id}/emergency-transfer`, {
+                        method: 'PUT', headers,
+                        body: JSON.stringify({ stage: emergencyStage, reason: emergencyReason.trim() }),
+                      });
+                      if (res.ok) {
+                        setEmergencyStage('');
+                        setEmergencyReason('');
+                        onRefresh();
+                      } else {
+                        const err = await res.json();
+                        setEmergencyError(err.error || 'فشل التحويل');
+                      }
+                    } catch {
+                      setEmergencyError('تعذر الاتصال بالخادم');
+                    } finally {
+                      setIsEmergencyTransferring(false);
+                    }
+                  }}
+                  disabled={isEmergencyTransferring || !emergencyStage || !emergencyReason.trim()}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  {isEmergencyTransferring ? 'جاري التحويل...' : 'تحويل طوارئ'}
+                </button>
+              </div>
             </section>
           )}
 
@@ -1417,6 +1394,8 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
                     {log.details && (() => {
                       try {
                         const d = JSON.parse(log.details);
+                        if (d.reason) return <p className="text-[10px] text-red-500 mt-0.5">السبب: {d.reason}</p>;
+                        if (d.from && d.to) return <p className="text-[10px] text-slate-400 mt-0.5">{STAGE_CONFIG[d.from]?.label || d.from} ← {STAGE_CONFIG[d.to]?.label || d.to}</p>;
                         if (d.assignments) return <p className="text-[10px] text-slate-400 mt-0.5">{d.assignments.join(' | ')}</p>;
                         if (d.newValue !== undefined) return <p className="text-[10px] text-slate-400 mt-0.5">{d.newValue ? 'مفعّل' : 'معطّل'}</p>;
                       } catch { return null; }

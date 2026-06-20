@@ -31,9 +31,24 @@ const getGenAI = () => {
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-for-development';
 const prisma = new PrismaClient();
 
-// CORS: read allowed origin from env, fallback to localhost for dev
+// CORS: accept both localhost (dev) and production domain
+const allowedOrigins = [
+  process.env.FRONTEND_URL || 'http://localhost:5173',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'https://fawri.net',
+  'https://www.fawri.net',
+].filter(Boolean);
+
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow all in development; tighten in production if needed
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
@@ -48,6 +63,7 @@ app.use('/uploads', express.static(uploadsDir));
 
 // Staff Operations API
 app.use('/api/staff', staffRoutes);
+// Prisma Client v5.20.0 — regenerated with SeoChecklist fields (sallaEmail, sallaPassword, packageType)
 
 // Third-Party Webhooks
 app.use('/api/webhooks', webhookRoutes);
@@ -58,7 +74,16 @@ app.post('/api/upload', async (req, res) => {
     const base64Data = fileData.replace(/^data:.*?;base64,/, "");
     const finalFileName = `${Date.now()}-${fileName.replace(/\s+/g, '_')}`;
     fs.writeFileSync(path.join(uploadsDir, finalFileName), base64Data, 'base64');
-    const baseUrl = process.env.BASE_URL || `http://localhost:${port}`;
+
+    // Auto-detect the correct base URL from the request
+    // This handles both local dev and production behind nginx proxy
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    const host = req.headers['x-forwarded-host'] || req.headers['host'] || `localhost:${port}`;
+    const detectedBaseUrl = `${protocol}://${host}`;
+    // Use detected URL, but allow BASE_URL override if it's not localhost
+    const envBaseUrl = process.env.BASE_URL || '';
+    const baseUrl = (envBaseUrl && !envBaseUrl.includes('localhost')) ? envBaseUrl : detectedBaseUrl;
+
     res.json({ url: `${baseUrl}/uploads/${finalFileName}` });
   } catch (e) { res.status(500).json({ error: 'Upload failed' }); }
 });
@@ -71,7 +96,7 @@ app.post('/api/seed-staff', async (req, res) => {
     { name: 'سارة', email: 'am@agency.com', role: 'ACCOUNT_MANAGER' },
     { name: 'خالد', email: 'designer@agency.com', role: 'DESIGNER' },
     { name: 'عمر', email: 'dev@agency.com', role: 'DEVELOPER' },
-    { name: 'نورة', email: 'qa@agency.com', role: 'QA' },
+    { name: 'نورة', email: 'seo@agency.com', role: 'SEO' },
   ];
   for (const s of staff) {
     if (!(await prisma.user.findUnique({ where: { email: s.email } }))) {
@@ -93,7 +118,14 @@ app.post('/api/ai/suggest-brand', async (req, res) => {
 app.post('/api/ai/generate-logo', async (req, res) => {
   try {
     const { brandName, industry, colors } = req.body;
-    const logoUrl = await generateLogoSVG(brandName, industry, colors);
+    // Auto-detect base URL from request
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    const host = req.headers['x-forwarded-host'] || req.headers['host'] || `localhost:${port}`;
+    const detectedBaseUrl = `${protocol}://${host}`;
+    const envBaseUrl = process.env.BASE_URL || '';
+    const baseUrl = (envBaseUrl && !envBaseUrl.includes('localhost')) ? envBaseUrl : detectedBaseUrl;
+    
+    const logoUrl = await generateLogoSVG(brandName, industry, colors, baseUrl);
     res.json({ logoUrl });
   } catch (e) { res.status(500).json({ error: 'Logo failed' }); }
 });
@@ -299,7 +331,9 @@ app.post('/api/tickets/create-final', async (req, res) => {
         selectedColors: JSON.stringify(data.colorPalette || []),
         industry: data.industry || '',
         referenceLogos: JSON.stringify(data.referenceLogos || []),
-        generatedLogoUrl: data.generatedLogoUrl || null
+        generatedLogoUrl: data.generatedLogoUrl || null,
+        selectedLogoType: data.selectedLogoType || null,
+        selectedLogoTypeName: data.selectedLogoTypeName || null,
       }}
     }});
 
@@ -332,7 +366,7 @@ app.post('/api/auth/verify-email', async (req, res) => {
   if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
   if (user.isActive === false) return res.status(403).json({ error: 'الحساب معطل من قبل الإدارة' });
 
-  const isStaff = ['ADMIN', 'ACCOUNT_MANAGER', 'DESIGNER', 'DEVELOPER', 'QA'].includes(user.role);
+  const isStaff = ['ADMIN', 'ACCOUNT_MANAGER', 'DESIGNER', 'DEVELOPER', 'SEO'].includes(user.role);
   const hasPassword = !!user.passwordHash;
 
   res.json({
@@ -361,7 +395,7 @@ app.post('/api/auth/login', async (req, res) => {
   if (user.isActive === false) return res.status(403).json({ error: 'الحساب معطل من قبل الإدارة' });
 
   // ── Password verification for staff roles ─────────────────────────────────
-  const isStaff = ['ADMIN', 'ACCOUNT_MANAGER', 'DESIGNER', 'DEVELOPER', 'QA'].includes(user.role);
+  const isStaff = ['ADMIN', 'ACCOUNT_MANAGER', 'DESIGNER', 'DEVELOPER', 'SEO'].includes(user.role);
   if (isStaff && user.passwordHash) {
     if (!password) {
       return res.status(401).json({ error: 'كلمة المرور مطلوبة' });
@@ -832,48 +866,923 @@ app.get('/api/tickets', authenticateToken, async (req: AuthRequest, res) => {
   res.json(enriched);
 });
 
+// ════════════════════════════════════════════════════════════════
+// INTAKE STAGE — Data Request / Response / Documents endpoints
+// ════════════════════════════════════════════════════════════════
+
+// أ- طلب بيانات إضافية من العميل (AM → Customer)
+app.post('/api/tickets/:id/data-request', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { message } = req.body;
+    const { role, userId } = req.user!;
+
+    if (!['ADMIN', 'ACCOUNT_MANAGER'].includes(role)) {
+      return res.status(403).json({ error: 'غير مصرح' });
+    }
+    if (!message?.trim()) {
+      return res.status(400).json({ error: 'نص الطلب مطلوب' });
+    }
+
+    const ticket = await prisma.ticket.findUnique({ where: { id } });
+    if (!ticket) return res.status(404).json({ error: 'الطلب غير موجود' });
+
+    const dataRequest = await prisma.dataRequest.create({
+      data: {
+        ticketId: id,
+        fromRole: 'ACCOUNT_MANAGER',
+        message: message.trim(),
+      }
+    });
+
+    // Notify the customer
+    if (ticket.customerId) {
+      await prisma.notification.create({
+        data: {
+          userId: ticket.customerId,
+          ticketId: id,
+          title: '📋 طلب بيانات إضافية',
+          message: 'مدير الحساب يطلب منك بيانات إضافية. يرجى الاطلاع والرد.',
+          isPriority: true,
+        }
+      });
+    }
+
+    res.json(dataRequest);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'فشل إرسال الطلب' });
+  }
+});
+
+// ب- رد العميل على طلب البيانات (Customer → AM)
+app.post('/api/tickets/:id/data-response', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { message } = req.body;
+    const { role, userId } = req.user!;
+
+    if (role !== 'CUSTOMER') {
+      return res.status(403).json({ error: 'غير مصرح' });
+    }
+    if (!message?.trim()) {
+      return res.status(400).json({ error: 'نص الرد مطلوب' });
+    }
+
+    // Verify ticket belongs to this customer
+    const ticket = await prisma.ticket.findFirst({
+      where: { id, customerId: userId }
+    });
+    if (!ticket) return res.status(404).json({ error: 'الطلب غير موجود' });
+
+    const dataRequest = await prisma.dataRequest.create({
+      data: {
+        ticketId: id,
+        fromRole: 'CUSTOMER',
+        message: message.trim(),
+      }
+    });
+
+    // Notify AM and ADMIN
+    await prisma.notification.createMany({
+      data: [
+        {
+          role: 'ACCOUNT_MANAGER',
+          ticketId: id,
+          title: '💬 رد العميل على طلب البيانات',
+          message: 'العميل أرسل رداً على طلب البيانات الإضافية.',
+          isPriority: true,
+        },
+        {
+          role: 'ADMIN',
+          ticketId: id,
+          title: '💬 رد عميل على طلب بيانات',
+          message: 'العميل أرسل رداً على طلب بيانات إضافية.',
+          isPriority: false,
+        }
+      ]
+    });
+
+    res.json(dataRequest);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'فشل إرسال الرد' });
+  }
+});
+
+// ج- جلب كل طلبات البيانات لتيكت معين
+app.get('/api/tickets/:id/data-requests', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { role, userId } = req.user!;
+
+    // Customers can only see their own ticket's data requests
+    if (role === 'CUSTOMER') {
+      const ticket = await prisma.ticket.findFirst({
+        where: { id, customerId: userId }
+      });
+      if (!ticket) return res.status(404).json({ error: 'الطلب غير موجود' });
+    }
+
+    const dataRequests = await prisma.dataRequest.findMany({
+      where: { ticketId: id },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    res.json(dataRequests);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'فشل جلب البيانات' });
+  }
+});
+
+// د- اعتماد بيانات العميل (AM يوافق على البيانات)
+app.put('/api/tickets/:id/approve-intake', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.user!;
+
+    if (!['ADMIN', 'ACCOUNT_MANAGER'].includes(role)) {
+      return res.status(403).json({ error: 'غير مصرح' });
+    }
+
+    // Resolve the latest unresolved data request
+    const latestRequest = await prisma.dataRequest.findFirst({
+      where: { ticketId: id, isResolved: false },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (latestRequest) {
+      await prisma.dataRequest.update({
+        where: { id: latestRequest.id },
+        data: { isResolved: true }
+      });
+    }
+
+    // Mark all unresolved as resolved
+    await prisma.dataRequest.updateMany({
+      where: { ticketId: id, isResolved: false },
+      data: { isResolved: true }
+    });
+
+    // Notify the customer
+    const ticket = await prisma.ticket.findUnique({ where: { id } });
+    if (ticket?.customerId) {
+      await prisma.notification.create({
+        data: {
+          userId: ticket.customerId,
+          ticketId: id,
+          title: '✅ تم اعتماد بياناتك',
+          message: 'تم اعتماد بياناتك بنجاح من قبل مدير الحساب.',
+          isPriority: true,
+        }
+      });
+    }
+
+    res.json({ success: true, message: 'تم اعتماد البيانات بنجاح' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'فشل الاعتماد' });
+  }
+});
+
+// هـ- رفع وثيقة العمل الحر أو السجل التجاري
+app.put('/api/tickets/:id/upload-documents', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { freelanceDocUrl, commercialRegUrl } = req.body;
+    const { role } = req.user!;
+
+    if (!['ADMIN', 'ACCOUNT_MANAGER'].includes(role)) {
+      return res.status(403).json({ error: 'غير مصرح' });
+    }
+
+    const updateData: any = {};
+    if (freelanceDocUrl !== undefined) updateData.freelanceDocUrl = freelanceDocUrl;
+    if (commercialRegUrl !== undefined) updateData.commercialRegUrl = commercialRegUrl;
+
+    const updated = await prisma.ticket.update({
+      where: { id },
+      data: updateData,
+    });
+
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'فشل رفع الوثائق' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════
+// SEO_STORE_SETUP STAGE — Proposals / Sub-Steps / Transfer
+// ════════════════════════════════════════════════════════════════
+
+// أ- حفظ/تحديث مقترحات SEO (upsert)
+app.put('/api/tickets/:id/seo-proposals', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.user!;
+    if (role === 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
+
+    const { storeName1, storeName2, storeName3, storeName4, domain1, domain2, domain3, domain4 } = req.body;
+
+    // Find existing or create
+    const existing = await prisma.seoProposal.findFirst({
+      where: { ticketId: id },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const proposalData = { storeName1, storeName2, storeName3, storeName4, domain1, domain2, domain3, domain4 };
+
+    let proposal;
+    if (existing) {
+      proposal = await prisma.seoProposal.update({
+        where: { id: existing.id },
+        data: proposalData
+      });
+    } else {
+      proposal = await prisma.seoProposal.create({
+        data: { ticketId: id, ...proposalData }
+      });
+    }
+
+    res.json(proposal);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'فشل حفظ المقترحات' });
+  }
+});
+
+// ب- إرسال المقترحات لمدير الحساب
+app.put('/api/tickets/:id/seo-proposals/send-to-am', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.user!;
+    if (role === 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
+
+    const existing = await prisma.seoProposal.findFirst({
+      where: { ticketId: id },
+      orderBy: { createdAt: 'desc' }
+    });
+    if (!existing) return res.status(404).json({ error: 'لا توجد مقترحات' });
+
+    const proposal = await prisma.seoProposal.update({
+      where: { id: existing.id },
+      data: { status: 'SENT_TO_AM' }
+    });
+
+    // Notify AM
+    await prisma.notification.create({
+      data: {
+        role: 'ACCOUNT_MANAGER',
+        ticketId: id,
+        title: '📋 مقترحات أسماء ودومينات جديدة',
+        message: 'فريق SEO أرسل مقترحات الأسماء والدومينات للمراجعة.',
+        isPriority: true,
+      }
+    });
+
+    res.json(proposal);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'فشل إرسال المقترحات' });
+  }
+});
+
+// ج- رد مدير الحساب على المقترحات
+app.put('/api/tickets/:id/seo-proposals/am-review', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { action, notes } = req.body;
+    const { role } = req.user!;
+
+    if (!['ADMIN', 'ACCOUNT_MANAGER'].includes(role)) {
+      return res.status(403).json({ error: 'غير مصرح' });
+    }
+
+    const existing = await prisma.seoProposal.findFirst({
+      where: { ticketId: id },
+      orderBy: { createdAt: 'desc' }
+    });
+    if (!existing) return res.status(404).json({ error: 'لا توجد مقترحات' });
+
+    if (action === 'APPROVE') {
+      const proposal = await prisma.seoProposal.update({
+        where: { id: existing.id },
+        data: { status: 'AM_APPROVED', amNotes: null }
+      });
+      res.json(proposal);
+    } else if (action === 'REVISION') {
+      const proposal = await prisma.seoProposal.update({
+        where: { id: existing.id },
+        data: { status: 'AM_REVISION', amNotes: notes || '' }
+      });
+      res.json(proposal);
+    } else {
+      res.status(400).json({ error: 'إجراء غير صالح' });
+    }
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'فشل المراجعة' });
+  }
+});
+
+// د- عرض المقترحات على العميل (AM يرسلها للعميل)
+app.put('/api/tickets/:id/seo-proposals/send-to-client', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.user!;
+
+    if (!['ADMIN', 'ACCOUNT_MANAGER'].includes(role)) {
+      return res.status(403).json({ error: 'غير مصرح' });
+    }
+
+    const existing = await prisma.seoProposal.findFirst({
+      where: { ticketId: id },
+      orderBy: { createdAt: 'desc' }
+    });
+    if (!existing) return res.status(404).json({ error: 'لا توجد مقترحات' });
+
+    const proposal = await prisma.seoProposal.update({
+      where: { id: existing.id },
+      data: { status: 'SENT_TO_CLIENT' }
+    });
+
+    // Notify customer
+    const ticket = await prisma.ticket.findUnique({ where: { id } });
+    if (ticket?.customerId) {
+      await prisma.notification.create({
+        data: {
+          userId: ticket.customerId,
+          ticketId: id,
+          title: '🏪 مقترحات اسم المتجر والدومين',
+          message: 'تم إعداد مقترحات لاسم ودومين متجرك. يرجى المراجعة والاختيار.',
+          isPriority: true,
+        }
+      });
+    }
+
+    res.json(proposal);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'فشل إرسال المقترحات للعميل' });
+  }
+});
+
+// هـ- رد العميل على المقترحات
+app.put('/api/tickets/:id/seo-proposals/client-review', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { action, selectedName, selectedDomain, notes } = req.body;
+    const { role, userId } = req.user!;
+
+    if (role !== 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
+
+    // Verify ticket belongs to customer
+    const ticket = await prisma.ticket.findFirst({ where: { id, customerId: userId } });
+    if (!ticket) return res.status(404).json({ error: 'الطلب غير موجود' });
+
+    const existing = await prisma.seoProposal.findFirst({
+      where: { ticketId: id },
+      orderBy: { createdAt: 'desc' }
+    });
+    if (!existing) return res.status(404).json({ error: 'لا توجد مقترحات' });
+
+    if (action === 'APPROVE') {
+      const proposal = await prisma.seoProposal.update({
+        where: { id: existing.id },
+        data: { status: 'CLIENT_APPROVED', selectedName, selectedDomain, clientNotes: notes || null }
+      });
+
+      // Notify AM
+      await prisma.notification.create({
+        data: {
+          role: 'ACCOUNT_MANAGER',
+          ticketId: id,
+          title: '✅ العميل اعتمد المقترحات',
+          message: `العميل اختار الاسم: ${selectedName} والدومين: ${selectedDomain}`,
+          isPriority: true,
+        }
+      });
+
+      res.json(proposal);
+    } else if (action === 'REVISION') {
+      const proposal = await prisma.seoProposal.update({
+        where: { id: existing.id },
+        data: { status: 'CLIENT_REVISION', clientNotes: notes || '' }
+      });
+
+      await prisma.notification.create({
+        data: {
+          role: 'ACCOUNT_MANAGER',
+          ticketId: id,
+          title: '⚠️ العميل طلب تعديل المقترحات',
+          message: `العميل طلب تعديل مقترحات الاسم/الدومين. ملاحظاته: ${notes || 'لا توجد'}`,
+          isPriority: true,
+        }
+      });
+
+      res.json(proposal);
+    } else {
+      res.status(400).json({ error: 'إجراء غير صالح' });
+    }
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'فشل المراجعة' });
+  }
+});
+
+// و- اعتماد نهائي (AM يؤكد اختيارات العميل ويرسلها لـ SEO)
+app.put('/api/tickets/:id/seo-proposals/finalize', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { selectedName, selectedDomain } = req.body;
+    const { role } = req.user!;
+
+    if (!['ADMIN', 'ACCOUNT_MANAGER'].includes(role)) {
+      return res.status(403).json({ error: 'غير مصرح' });
+    }
+
+    const existing = await prisma.seoProposal.findFirst({
+      where: { ticketId: id },
+      orderBy: { createdAt: 'desc' }
+    });
+    if (!existing) return res.status(404).json({ error: 'لا توجد مقترحات' });
+
+    const proposal = await prisma.seoProposal.update({
+      where: { id: existing.id },
+      data: { isFinalized: true, selectedName, selectedDomain }
+    });
+
+    // Move ticket to STORE_SETUP sub-step
+    await prisma.ticket.update({
+      where: { id },
+      data: { seoSubStep: 'STORE_SETUP' }
+    });
+
+    res.json(proposal);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'فشل الاعتماد النهائي' });
+  }
+});
+
+// ز- جلب المقترحات
+app.get('/api/tickets/:id/seo-proposals', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { role, userId } = req.user!;
+
+    // Customers can only see their own ticket
+    if (role === 'CUSTOMER') {
+      const ticket = await prisma.ticket.findFirst({ where: { id, customerId: userId } });
+      if (!ticket) return res.status(404).json({ error: 'الطلب غير موجود' });
+    }
+
+    const proposal = await prisma.seoProposal.findFirst({
+      where: { ticketId: id },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json(proposal || null);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'فشل جلب المقترحات' });
+  }
+});
+
+// ح- تحديث الخطوة الفرعية
+app.put('/api/tickets/:id/seo-substep', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { subStep } = req.body;
+    const { role } = req.user!;
+
+    if (role === 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
+
+    const ticket = await prisma.ticket.update({
+      where: { id },
+      data: { seoSubStep: subStep }
+    });
+
+    res.json(ticket);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'فشل تحديث الخطوة' });
+  }
+});
+
+// ط- تحويل من SEO للمصمم
+app.put('/api/tickets/:id/transfer-to-designer', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { assignedDesignerId, seoBrief, customSlaHours } = req.body;
+    const { role, userId } = req.user!;
+
+    if (role === 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
+
+    const ticket = await prisma.ticket.findUnique({ where: { id } });
+    if (!ticket) return res.status(404).json({ error: 'الطلب غير موجود' });
+
+    if (ticket.seoSubStep !== 'READY_TO_TRANSFER') {
+      return res.status(400).json({ error: 'يجب إكمال جميع المهام قبل التحويل' });
+    }
+    if (!assignedDesignerId) {
+      return res.status(400).json({ error: 'يجب اختيار المصمم' });
+    }
+    if (!seoBrief?.trim()) {
+      return res.status(400).json({ error: 'يجب كتابة البريف للمصمم' });
+    }
+
+    const updated = await prisma.ticket.update({
+      where: { id },
+      data: {
+        assignedDesignerId,
+        seoBrief: seoBrief.trim(),
+        designerId: assignedDesignerId,
+        stage: 'DESIGN',
+        stageEnteredAt: new Date(),
+        customSlaHours: customSlaHours ? parseInt(customSlaHours) : null,
+      },
+      include: { client: true, aiProposal: true }
+    });
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        ticketId: id,
+        userId,
+        action: 'STAGE_CHANGED',
+        details: JSON.stringify({ from: 'SEO_STORE_SETUP', to: 'DESIGN', assignedDesignerId })
+      }
+    }).catch(() => {});
+
+    // Notify designer
+    await prisma.notification.create({
+      data: {
+        userId: assignedDesignerId,
+        ticketId: id,
+        title: '🎨 مهمة تصميم جديدة',
+        message: 'تم تحويل طلب جديد إليك من فريق SEO. يرجى الاطلاع على البريف والبدء بالعمل.',
+        isPriority: true,
+      }
+    });
+
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'فشل التحويل' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════
+// DESIGN STAGE — Design Delivery / Review / Transfer to Dev
+// ════════════════════════════════════════════════════════════════
+
+// أ- جلب بيانات التصميم
+app.get('/api/tickets/:id/design-delivery', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const delivery = await prisma.designDelivery.findFirst({
+      where: { ticketId: id }, orderBy: { createdAt: 'desc' }
+    });
+    res.json(delivery || null);
+  } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
+
+// ب- حفظ تسليم التصميم
+app.put('/api/tickets/:id/design-delivery', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.user!;
+    if (role === 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
+    const { figmaLink, images } = req.body;
+    const imagesJson = Array.isArray(images) ? JSON.stringify(images) : images || '[]';
+
+    const existing = await prisma.designDelivery.findFirst({
+      where: { ticketId: id }, orderBy: { createdAt: 'desc' }
+    });
+    let delivery;
+    if (existing) {
+      delivery = await prisma.designDelivery.update({
+        where: { id: existing.id }, data: { figmaLink, images: imagesJson }
+      });
+    } else {
+      delivery = await prisma.designDelivery.create({
+        data: { ticketId: id, figmaLink, images: imagesJson }
+      });
+    }
+    res.json(delivery);
+  } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
+
+// ج- رفع صورة تصميم
+app.post('/api/tickets/:id/design-image', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { fileName, fileData } = req.body;
+    const base64Data = fileData.replace(/^data:.*?;base64,/, "");
+    const finalFileName = `${Date.now()}-${fileName.replace(/\s+/g, '_')}`;
+    fs.writeFileSync(path.join(uploadsDir, finalFileName), base64Data, 'base64');
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    const host = req.headers['x-forwarded-host'] || req.headers['host'] || `localhost:${port}`;
+    const detectedBaseUrl = `${protocol}://${host}`;
+    const envBaseUrl = process.env.BASE_URL || '';
+    const baseUrl = (envBaseUrl && !envBaseUrl.includes('localhost')) ? envBaseUrl : detectedBaseUrl;
+    res.json({ url: `${baseUrl}/uploads/${finalFileName}` });
+  } catch { res.status(500).json({ error: 'فشل رفع الصورة' }); }
+});
+
+// د- إرسال التصميم لـ SEO
+app.put('/api/tickets/:id/design-delivery/send-to-seo', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const existing = await prisma.designDelivery.findFirst({ where: { ticketId: id }, orderBy: { createdAt: 'desc' } });
+    if (!existing) return res.status(404).json({ error: 'لا يوجد تسليم' });
+    const d = await prisma.designDelivery.update({ where: { id: existing.id }, data: { status: 'SENT_TO_SEO' } });
+    res.json(d);
+  } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
+
+// هـ- مراجعة SEO للتصميم
+app.put('/api/tickets/:id/design-delivery/seo-review', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { action, notes } = req.body;
+    const existing = await prisma.designDelivery.findFirst({ where: { ticketId: id }, orderBy: { createdAt: 'desc' } });
+    if (!existing) return res.status(404).json({ error: 'لا يوجد تسليم' });
+    if (action === 'APPROVE') {
+      res.json(await prisma.designDelivery.update({ where: { id: existing.id }, data: { status: 'SEO_APPROVED', seoNotes: null } }));
+    } else if (action === 'REVISION') {
+      res.json(await prisma.designDelivery.update({ where: { id: existing.id }, data: { status: 'SEO_REVISION', seoNotes: notes || '' } }));
+    } else { res.status(400).json({ error: 'إجراء غير صالح' }); }
+  } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
+
+// و- إرسال التصميم للعميل
+app.put('/api/tickets/:id/design-delivery/send-to-client', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const existing = await prisma.designDelivery.findFirst({ where: { ticketId: id }, orderBy: { createdAt: 'desc' } });
+    if (!existing) return res.status(404).json({ error: 'لا يوجد تسليم' });
+    const d = await prisma.designDelivery.update({ where: { id: existing.id }, data: { status: 'SENT_TO_CLIENT' } });
+    const ticket = await prisma.ticket.findUnique({ where: { id } });
+    if (ticket?.customerId) {
+      await prisma.notification.create({ data: { userId: ticket.customerId, ticketId: id, title: '🎨 تصميم متجرك جاهز', message: 'التصاميم جاهزة للاعتماد.', isPriority: true } });
+    }
+    res.json(d);
+  } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
+
+// ز- رد العميل على التصميم
+app.put('/api/tickets/:id/design-delivery/client-review', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { action, notes } = req.body;
+    const { role, userId } = req.user!;
+    if (role !== 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
+    const ticket = await prisma.ticket.findFirst({ where: { id, customerId: userId } });
+    if (!ticket) return res.status(404).json({ error: 'الطلب غير موجود' });
+    const existing = await prisma.designDelivery.findFirst({ where: { ticketId: id }, orderBy: { createdAt: 'desc' } });
+    if (!existing) return res.status(404).json({ error: 'لا يوجد تسليم' });
+    if (action === 'APPROVE') {
+      const d = await prisma.designDelivery.update({ where: { id: existing.id }, data: { status: 'CLIENT_APPROVED', isFinalized: true, clientNotes: notes || null } });
+      await prisma.notification.create({ data: { role: 'ACCOUNT_MANAGER', ticketId: id, title: '✅ العميل اعتمد التصميم', message: 'العميل وافق على التصاميم.', isPriority: true } });
+      res.json(d);
+    } else if (action === 'REVISION') {
+      const d = await prisma.designDelivery.update({ where: { id: existing.id }, data: { status: 'CLIENT_REVISION', clientNotes: notes || '' } });
+      await prisma.notification.create({ data: { role: 'ACCOUNT_MANAGER', ticketId: id, title: '⚠️ العميل طلب تعديل التصميم', message: `ملاحظات: ${notes || ''}`, isPriority: true } });
+      res.json(d);
+    } else { res.status(400).json({ error: 'إجراء غير صالح' }); }
+  } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
+
+// ح- تحويل من التصميم للتطوير
+app.put('/api/tickets/:id/transfer-to-dev', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { developerId, devBrief, customSlaHours } = req.body;
+    const { role, userId } = req.user!;
+    if (role === 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
+    const ticket = await prisma.ticket.findUnique({ where: { id } });
+    if (!ticket) return res.status(404).json({ error: 'الطلب غير موجود' });
+    const delivery = await prisma.designDelivery.findFirst({ where: { ticketId: id }, orderBy: { createdAt: 'desc' } });
+    if (!delivery?.isFinalized) return res.status(400).json({ error: 'يجب اعتماد التصميم من العميل أولاً' });
+    if (!developerId) return res.status(400).json({ error: 'يجب اختيار المطور' });
+    const updated = await prisma.ticket.update({
+      where: { id },
+      data: { developerId, devBrief: devBrief?.trim() || null, stage: 'DEVELOPMENT', stageEnteredAt: new Date(), customSlaHours: customSlaHours ? parseInt(customSlaHours) : null },
+      include: { client: true, aiProposal: true }
+    });
+    await prisma.auditLog.create({ data: { ticketId: id, userId, action: 'STAGE_CHANGED', details: JSON.stringify({ from: 'DESIGN', to: 'DEVELOPMENT', developerId }) } }).catch(() => {});
+    await prisma.notification.create({ data: { userId: developerId, ticketId: id, title: '🔧 مهمة تطوير جديدة', message: 'تم تحويل طلب جديد إليك. يرجى البدء بالعمل.', isPriority: true } });
+    res.json(updated);
+  } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
+
+// ════════════════════════════════════════════════════════════════
+// DEVELOPMENT STAGE — Dev Checklist / SEO Review
+// ════════════════════════════════════════════════════════════════
+
+// ط- جلب مهام المطور
+app.get('/api/tickets/:id/dev-checklist', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const cl = await prisma.devChecklist.findUnique({ where: { ticketId: id } });
+    res.json(cl || null);
+  } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
+
+// ي- تحديث مهام المطور
+app.put('/api/tickets/:id/dev-checklist', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.user!;
+    if (role === 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
+    const { designApplied, pagesSetup, uiTested, deliveredToSeo, isSubmittedToSeo } = req.body;
+    const data: any = {};
+    if (designApplied !== undefined) data.designApplied = designApplied;
+    if (pagesSetup !== undefined) data.pagesSetup = pagesSetup;
+    if (uiTested !== undefined) data.uiTested = uiTested;
+    if (deliveredToSeo !== undefined) data.deliveredToSeo = deliveredToSeo;
+    if (isSubmittedToSeo !== undefined) data.isSubmittedToSeo = isSubmittedToSeo;
+    const cl = await prisma.devChecklist.upsert({
+      where: { ticketId: id }, update: data, create: { ticketId: id, ...data }
+    });
+    res.json(cl);
+  } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
+
+// ك- مراجعة SEO لعمل المطور
+app.put('/api/tickets/:id/dev-checklist/seo-review', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { action, notes } = req.body;
+    const { role, userId } = req.user!;
+    if (role === 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
+    const cl = await prisma.devChecklist.findUnique({ where: { ticketId: id } });
+    if (!cl) return res.status(404).json({ error: 'لا توجد بيانات' });
+    if (action === 'APPROVE') {
+      const updated = await prisma.devChecklist.update({ where: { ticketId: id }, data: { seoReviewStatus: 'APPROVED' } });
+      // Transition to SEO_FINAL
+      await prisma.ticket.update({ where: { id }, data: { stage: 'SEO_FINAL', stageEnteredAt: new Date() } });
+      await prisma.auditLog.create({ data: { ticketId: id, userId, action: 'STAGE_CHANGED', details: JSON.stringify({ from: 'DEVELOPMENT', to: 'SEO_FINAL' }) } }).catch(() => {});
+      res.json(updated);
+    } else if (action === 'REVISION') {
+      res.json(await prisma.devChecklist.update({ where: { ticketId: id }, data: { seoReviewStatus: 'REVISION', seoReviewNotes: notes || '' } }));
+    } else { res.status(400).json({ error: 'إجراء غير صالح' }); }
+  } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
+
+// ════════════════════════════════════════════════════════════════
+// SEO_FINAL STAGE — Final Checklist / AM Review / Client Review / Delivery
+// ════════════════════════════════════════════════════════════════
+
+// أ- جلب مهام SEO النهائية
+app.get('/api/tickets/:id/seo-final', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const cl = await prisma.seoFinalChecklist.findUnique({ where: { ticketId: id } });
+    res.json(cl || null);
+  } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
+
+// ب- تحديث مهام SEO النهائية
+app.put('/api/tickets/:id/seo-final', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.user!;
+    if (role === 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
+    const allowed = ['paymentActivated','paymentTested','paymentGatewaysOk','shippingLinked','shippingZonesSet','shippingTested','pageTitlesSet','metaDescSet','urlsOptimized','productsOptimized','contentReviewed','finalInspection'];
+    const data: any = {};
+    for (const k of allowed) { if (req.body[k] !== undefined) data[k] = req.body[k]; }
+    const cl = await prisma.seoFinalChecklist.upsert({
+      where: { ticketId: id }, update: data, create: { ticketId: id, ...data }
+    });
+    res.json(cl);
+  } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
+
+// ج- إرسال لمدير الحساب
+app.put('/api/tickets/:id/seo-final/send-to-am', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { brief } = req.body;
+    const cl = await prisma.seoFinalChecklist.update({
+      where: { ticketId: id }, data: { status: 'SENT_TO_AM', seoBriefToAm: brief || '' }
+    });
+    await prisma.notification.create({ data: { role: 'ACCOUNT_MANAGER', ticketId: id, title: '📋 المتجر جاهز للمراجعة النهائية', message: 'فريق SEO أنهى جميع المهام.', isPriority: true } });
+    res.json(cl);
+  } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
+
+// د- مراجعة مدير الحساب
+app.put('/api/tickets/:id/seo-final/am-review', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { action, notes } = req.body;
+    const { role } = req.user!;
+    if (!['ADMIN', 'ACCOUNT_MANAGER'].includes(role)) return res.status(403).json({ error: 'غير مصرح' });
+    if (action === 'APPROVE') {
+      res.json(await prisma.seoFinalChecklist.update({ where: { ticketId: id }, data: { status: 'AM_APPROVED', amNotes: null } }));
+    } else if (action === 'REVISION') {
+      res.json(await prisma.seoFinalChecklist.update({ where: { ticketId: id }, data: { status: 'AM_REVISION', amNotes: notes || '' } }));
+    } else { res.status(400).json({ error: 'إجراء غير صالح' }); }
+  } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
+
+// هـ- عرض على العميل
+app.put('/api/tickets/:id/seo-final/send-to-client', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.user!;
+    if (!['ADMIN', 'ACCOUNT_MANAGER'].includes(role)) return res.status(403).json({ error: 'غير مصرح' });
+    const cl = await prisma.seoFinalChecklist.update({ where: { ticketId: id }, data: { status: 'SENT_TO_CLIENT' } });
+    const ticket = await prisma.ticket.findUnique({ where: { id } });
+    if (ticket?.customerId) {
+      await prisma.notification.create({ data: { userId: ticket.customerId, ticketId: id, title: '🎉 متجرك جاهز للمراجعة النهائية', message: 'تم الانتهاء من جميع الإعدادات.', isPriority: true } });
+    }
+    res.json(cl);
+  } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
+
+// و- رد العميل
+app.put('/api/tickets/:id/seo-final/client-review', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { action, notes } = req.body;
+    const { role, userId } = req.user!;
+    if (role !== 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
+    const ticket = await prisma.ticket.findFirst({ where: { id, customerId: userId } });
+    if (!ticket) return res.status(404).json({ error: 'الطلب غير موجود' });
+    if (action === 'APPROVE') {
+      const cl = await prisma.seoFinalChecklist.update({ where: { ticketId: id }, data: { status: 'CLIENT_APPROVED', isFinalized: true, clientNotes: null } });
+      await prisma.notification.create({ data: { role: 'ACCOUNT_MANAGER', ticketId: id, title: '✅ العميل اعتمد المراجعة النهائية', message: 'العميل وافق. جاهز للتسليم.', isPriority: true } });
+      res.json(cl);
+    } else if (action === 'REVISION') {
+      const cl = await prisma.seoFinalChecklist.update({ where: { ticketId: id }, data: { status: 'CLIENT_REVISION', clientNotes: notes || '' } });
+      await prisma.notification.create({ data: { role: 'ACCOUNT_MANAGER', ticketId: id, title: '⚠️ العميل طلب تعديل', message: `ملاحظات: ${notes || ''}`, isPriority: true } });
+      res.json(cl);
+    } else { res.status(400).json({ error: 'إجراء غير صالح' }); }
+  } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
+
+// ز- التسليم النهائي
+app.put('/api/tickets/:id/final-delivery', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { notes } = req.body;
+    const { role, userId } = req.user!;
+    if (!['ADMIN', 'ACCOUNT_MANAGER'].includes(role)) return res.status(403).json({ error: 'غير مصرح' });
+    const cl = await prisma.seoFinalChecklist.findUnique({ where: { ticketId: id } });
+    if (!cl?.isFinalized) return res.status(400).json({ error: 'يجب اعتماد العميل أولاً' });
+    const updated = await prisma.ticket.update({
+      where: { id },
+      data: { stage: 'DELIVERED', stageEnteredAt: new Date(), isDelivered: true, deliveredAt: new Date(), finalDeliveryNotes: notes || null },
+      include: { client: true }
+    });
+    await prisma.auditLog.create({ data: { ticketId: id, userId, action: 'STAGE_CHANGED', details: JSON.stringify({ from: 'SEO_FINAL', to: 'DELIVERED' }) } }).catch(() => {});
+    if (updated.customerId) {
+      await prisma.notification.create({ data: { userId: updated.customerId, ticketId: id, title: '🎉 تم تسليم متجرك!', message: 'مبارك! تم تسليم متجرك بنجاح.', isPriority: true } });
+    }
+    res.json(updated);
+  } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
+
+// و- تغيير المرحلة (مع تحقق INTAKE)
 app.put('/api/tickets/:id/stage', authenticateToken, async (req: AuthRequest, res) => {
   const id = req.params['id'] as string;
   const stage = req.body['stage'] as string;
   const ticket = await prisma.ticket.findUnique({ where: { id } });
   if (!ticket) return res.status(404).json({ error: 'Not found' });
 
-  if (ticket.stage === 'DEVELOPMENT' && stage === 'REVIEW') {
-    const cl = JSON.parse(ticket.checklists || '[]');
-    if (!areChecklistItemsComplete(ticket.stage, cl)) return res.status(400).json({ error: 'Checklist incomplete' });
+  // ── INTAKE → next stage: require documents + assignedSeoId + intakeBrief ──
+  if (ticket.stage === 'INTAKE' && stage !== 'INTAKE') {
+    const { assignedSeoId, intakeBrief, customSlaHours } = req.body;
+
+    if (!ticket.freelanceDocUrl && !ticket.commercialRegUrl) {
+      return res.status(400).json({ error: 'يجب رفع وثيقة واحدة على الأقل (وثيقة العمل الحر أو السجل التجاري) قبل التحويل.' });
+    }
+    if (!assignedSeoId) {
+      return res.status(400).json({ error: 'يجب اختيار شخص SEO قبل التحويل.' });
+    }
+    if (!intakeBrief?.trim()) {
+      return res.status(400).json({ error: 'يجب كتابة البريف قبل التحويل.' });
+    }
+
+    // Save assignedSeoId and intakeBrief + customSlaHours
+    await prisma.ticket.update({
+      where: { id },
+      data: {
+        assignedSeoId,
+        intakeBrief: intakeBrief.trim(),
+        ...(customSlaHours ? { customSlaHours: parseInt(customSlaHours) } : { customSlaHours: null }),
+      }
+    });
   }
 
-  if (ticket.stage === 'LEGAL_PROCESSING' && stage !== 'INTAKE' && stage !== 'LEGAL_PROCESSING') {
-    const fullTicket = await prisma.ticket.findUnique({
-      where: { id: id },
-      include: { client: true, storeDetails: true }
-    });
-    const clientData = (fullTicket as any)?.client;
-    const storeData = (fullTicket as any)?.storeDetails;
-    const hasDoc = clientData?.documentFileUrl || clientData?.legalDocUrl;
-    
-    const missing = [];
-    if (!hasDoc) missing.push('وثيقة العمل الحر');
-    if (!storeData?.domainName) missing.push('اسم الدومين');
-    if (!storeData?.sallaStoreUrl) missing.push('رابط متجر سلة / زد');
-    
-    if (missing.length > 0) {
-      return res.status(400).json({ error: `يرجى (حفظ البيانات القانونية) والتأكد من تعبئة: ${missing.join('، ')}` });
-    }
-  }
+
+
+
+
 
   if (stage === 'DESIGN' && !ticket.designerId) {
     return res.status(400).json({ error: 'يجب تعيين مصمم (عضو للفريق) قبل تغيير الحالة إلى التصميم.' });
   }
 
-  if (['DESIGN', 'CLIENT_REVISION'].includes(ticket.stage) &&
-      !['INTAKE', 'LEGAL_PROCESSING', 'DESIGN', 'CLIENT_REVISION', 'PENDING_CLIENT_APPROVAL'].includes(stage)) {
+  if (ticket.stage === 'DESIGN' &&
+      !['INTAKE', 'SEO_STORE_SETUP', 'DESIGN'].includes(stage)) {
     const missing = [];
     if (!ticket.designLogoUrl) missing.push('شعار المتجر');
     
     let banners: string[] = [];
     try { banners = JSON.parse(ticket.designBannersUrl || '[]'); } catch { banners = ticket.designBannersUrl ? [ticket.designBannersUrl] : []; }
-    if (banners.length === 0 && stage !== 'CLIENT_REVISION') missing.push('البنرات');
+    if (banners.length === 0) missing.push('البنرات');
 
     if (missing.length > 0) {
       return res.status(400).json({ error: `يرجى من المصمم (حفظ ملفات التصميم) والتأكد من إرفاق: ${missing.join('، ')}` });
@@ -883,9 +1792,7 @@ app.put('/api/tickets/:id/stage', authenticateToken, async (req: AuthRequest, re
   if (stage === 'DEVELOPMENT' && !ticket.developerId) {
     return res.status(400).json({ error: 'يجب تعيين مطور (عضو للفريق) قبل تغيير الحالة إلى التطوير.' });
   }
-  if (stage === 'REVIEW' && !ticket.qaId) {
-    return res.status(400).json({ error: 'يجب تعيين مراجع جودة (عضو للفريق) قبل تغيير الحالة إلى المراجعة.' });
-  }
+
 
   const updated = await prisma.ticket.update({
     where: { id },
@@ -910,6 +1817,54 @@ app.put('/api/tickets/:id/stage', authenticateToken, async (req: AuthRequest, re
     }});
   }
   res.json(updated);
+});
+
+// ════════════════════════════════════════════════════════════════
+// PUT /api/tickets/:id/emergency-transfer — ADMIN-only forced stage change
+// ════════════════════════════════════════════════════════════════
+app.put('/api/tickets/:id/emergency-transfer', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const id = req.params['id'] as string;
+    const { stage, reason } = req.body;
+
+    // Only ADMIN
+    const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
+    if (!user || user.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'هذا الإجراء مسموح فقط لمدير النظام.' });
+    }
+
+    if (!stage || !reason?.trim()) {
+      return res.status(400).json({ error: 'يجب تحديد المرحلة وكتابة سبب التحويل.' });
+    }
+
+    const validStages = ['INTAKE', 'SEO_STORE_SETUP', 'DESIGN', 'DEVELOPMENT', 'SEO_FINAL', 'DELIVERED'];
+    if (!validStages.includes(stage)) {
+      return res.status(400).json({ error: 'المرحلة غير صالحة.' });
+    }
+
+    const ticket = await prisma.ticket.findUnique({ where: { id } });
+    if (!ticket) return res.status(404).json({ error: 'الطلب غير موجود.' });
+
+    const updated = await prisma.ticket.update({
+      where: { id },
+      data: { stage, stageEnteredAt: new Date(), isSlaBreached: false },
+      include: { client: true }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        ticketId: id,
+        userId: req.user!.userId,
+        action: 'EMERGENCY_TRANSFER',
+        details: JSON.stringify({ from: ticket.stage, to: stage, reason: reason.trim() })
+      }
+    }).catch(() => {});
+
+    res.json(updated);
+  } catch (e: any) {
+    console.error('[emergency-transfer] Error:', e.message);
+    res.status(500).json({ error: 'فشل التحويل الطارئ.' });
+  }
 });
 
 app.put('/api/tickets/:id/assign', authenticateToken, async (req: AuthRequest, res) => {
@@ -984,6 +1939,9 @@ app.post('/api/tickets/save-ai-proposal', authenticateToken, async (req: AuthReq
       industry,
       description,
       targetAudience,
+      // logo type
+      selectedLogoType,
+      selectedLogoTypeName,
     } = req.body;
 
     // Find the customer's ticket
@@ -1007,6 +1965,8 @@ app.post('/api/tickets/save-ai-proposal', authenticateToken, async (req: AuthReq
       selectedColors:   JSON.stringify(colorPalette || []),
       referenceLogos:   JSON.stringify(referenceLogos || []),
       generatedLogoUrl: generatedLogoUrl || null,
+      selectedLogoType: selectedLogoType || null,
+      selectedLogoTypeName: selectedLogoTypeName || null,
       suggestedNames:   JSON.stringify([selectedName].filter(Boolean)),
     };
 
@@ -1045,10 +2005,172 @@ app.post('/api/tickets/save-ai-proposal', authenticateToken, async (req: AuthReq
   }
 });
 
+// ── SEO Checklist: Get ─────────────────────────────────────────────────────
+app.get('/api/tickets/:id/seo-checklist', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const checklist = await prisma.seoChecklist.findUnique({ where: { ticketId: id } });
+    res.json(checklist || null);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'فشل جلب بيانات SEO' });
+  }
+});
+
+// ── SEO Checklist: Upsert ──────────────────────────────────────────────────
+app.put('/api/tickets/:id/seo-checklist', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const data = req.body;
+
+    console.log('[SEO PUT] ticketId:', id);
+    console.log('[SEO PUT] raw body keys:', Object.keys(data || {}));
+
+    // Remove any non-schema fields
+    const allowedFields = [
+      'nicheSelected','domainChosen','domainName','gmailCreated','gmailEmail','gmailPassword',
+      'sallaAccountCreated','sallaEmail','sallaPassword','domainPurchased','packageUpgraded','packageType',
+      'logoDesigned','domainLinked',
+      'googleAnalyticsLinked','logoApplied','storeVerified','siloCreated','bankAccountAdded',
+      'infoPagesDone','footerDescDone','contactInfoAdded','whatsappButtonAdded',
+      'supplierSelected','supplierPlatformName','apiLinked','productsUploaded','productsCategorized',
+      'bannerDesigned','seoHomepage','seoCategoriesPage','profitMarginsSet',
+      'paymentGatewaysLinked','shippingCompaniesLinked','uiApplied','storeLaunched','linkSentToClient',
+      'storeEmail','storePassword',
+    ];
+    const cleanData: Record<string, any> = {};
+    for (const key of allowedFields) {
+      if (key in data) cleanData[key] = data[key];
+    }
+
+    console.log('[SEO PUT] cleanData:', cleanData);
+
+    const checklist = await prisma.seoChecklist.upsert({
+      where:  { ticketId: id },
+      update: cleanData,
+      create: { ticketId: id, ...cleanData },
+    });
+    console.log('[SEO PUT] saved id:', checklist.id);
+    res.json(checklist);
+  } catch (error: any) {
+    console.error('[SEO PUT] error:', error.message);
+    res.status(500).json({ error: error.message || 'فشل تحديث بيانات SEO' });
+  }
+});
+
+async function migrateOldStages() {
+  const migrations: Record<string, string> = {
+    'LEGAL_PROCESSING': 'INTAKE',
+    'PENDING_CLIENT_APPROVAL': 'DESIGN',
+    'CLIENT_APPROVED': 'DESIGN',
+    'CLIENT_REVISION': 'DESIGN',
+    'PENDING_AM_REVIEW': 'DEVELOPMENT',
+    'DEVELOPMENT_REVISION': 'DEVELOPMENT',
+    'REVIEW': 'SEO_FINAL',
+  };
+  for (const [oldStage, newStage] of Object.entries(migrations)) {
+    const count = await prisma.ticket.updateMany({
+      where: { stage: oldStage },
+      data: { stage: newStage },
+    });
+    if (count.count > 0) {
+      console.log(`✔ Migrated ${count.count} tickets from ${oldStage} → ${newStage}`);
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// LOGO TYPES — Admin-managed, client-selectable
+// ════════════════════════════════════════════════════════════════
+
+// GET active logo types (public — any authenticated user)
+app.get('/api/logo-types', async (_req: any, res: any) => {
+  try {
+    const types = await prisma.logoType.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } });
+    res.json(types);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// GET all logo types (admin)
+app.get('/api/logo-types/all', authenticateToken, async (req: AuthRequest, res) => {
+  if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'غير مصرح' });
+  try {
+    const types = await prisma.logoType.findMany({ orderBy: { sortOrder: 'asc' } });
+    res.json(types);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// POST create logo type (admin)
+app.post('/api/logo-types', authenticateToken, async (req: AuthRequest, res) => {
+  if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'غير مصرح' });
+  try {
+    const { name, description, imageUrl } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'اسم النوع مطلوب' });
+    const maxOrder = await prisma.logoType.aggregate({ _max: { sortOrder: true } });
+    const newType = await prisma.logoType.create({
+      data: { name: name.trim(), description: description?.trim() || null, imageUrl: imageUrl || null, sortOrder: (maxOrder._max.sortOrder || 0) + 1 }
+    });
+    res.json(newType);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT update logo type (admin)
+app.put('/api/logo-types/:id', authenticateToken, async (req: AuthRequest, res) => {
+  if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'غير مصرح' });
+  try {
+    const { name, description, imageUrl, isActive, sortOrder } = req.body;
+    const data: any = {};
+    if (name !== undefined) data.name = name.trim();
+    if (description !== undefined) data.description = description?.trim() || null;
+    if (imageUrl !== undefined) data.imageUrl = imageUrl || null;
+    if (isActive !== undefined) data.isActive = isActive;
+    if (sortOrder !== undefined) data.sortOrder = sortOrder;
+    const updated = await prisma.logoType.update({ where: { id: req.params.id }, data });
+    res.json(updated);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE logo type (admin)
+app.delete('/api/logo-types/:id', authenticateToken, async (req: AuthRequest, res) => {
+  if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'غير مصرح' });
+  try {
+    await prisma.logoType.delete({ where: { id: req.params.id } });
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT reorder logo types (admin)
+app.put('/api/logo-types/reorder', authenticateToken, async (req: AuthRequest, res) => {
+  if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'غير مصرح' });
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids مطلوبة' });
+    await Promise.all(ids.map((id: string, i: number) => prisma.logoType.update({ where: { id }, data: { sortOrder: i + 1 } })));
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
 async function start() {
 
   validateEncryptionKey();
   await prisma.$connect();
+  await migrateOldStages().catch(console.error);
+  // Migrate old QA role to SEO
+  await prisma.user.updateMany({ where: { role: 'QA' }, data: { role: 'SEO' } }).then(r => { if (r.count > 0) console.log(`✔ Migrated ${r.count} users from QA → SEO`); }).catch(console.error);
+
+  // Seed default logo types
+  const logoTypeCount = await prisma.logoType.count();
+  if (logoTypeCount === 0) {
+    const defaults = [
+      { name: 'شعار حرفي فقط (Wordmark)', description: 'الشعار يتكون من اسم العلامة التجارية فقط بخط مميز', sortOrder: 1 },
+      { name: 'شعار حرفي مع أيقونة (Combination)', description: 'اسم العلامة مع رمز أو أيقونة بجانبه', sortOrder: 2 },
+      { name: 'شعار حرف واحد (Lettermark)', description: 'حرف واحد أو اختصار يمثل العلامة التجارية', sortOrder: 3 },
+      { name: 'شعار رمزي (Symbol/Icon)', description: 'رمز أو أيقونة فقط بدون نص', sortOrder: 4 },
+      { name: 'شعار شعاري (Emblem)', description: 'النص داخل شكل أو إطار (مثل الشعارات الرسمية)', sortOrder: 5 },
+    ];
+    for (const d of defaults) await prisma.logoType.create({ data: d });
+    console.log('✔ Seeded 5 default logo types');
+  }
+
   app.listen(port, () => console.log(`Server on ${port}`));
 }
 start();

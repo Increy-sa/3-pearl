@@ -4,6 +4,8 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from '../../config/api';
 
+type LogoTypeOption = { id: string; name: string; description?: string; imageUrl?: string };
+
 interface BrandColor {
   name: string;
   hex: string;
@@ -19,9 +21,13 @@ export function AIProposalView({ proposal, legalData, intakeData }: { proposal: 
   const [confirmingDashboard, setConfirmingDashboard] = useState(false);
 
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [generatingLogo, setGeneratingLogo] = useState(false);
   const [referenceLogoUrl, setReferenceLogoUrl] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  // Logo type selection
+  const [logoTypes, setLogoTypes] = useState<LogoTypeOption[]>([]);
+  const [selectedLogoTypeId, setSelectedLogoTypeId] = useState<string | null>(null);
+  const [logoTypesLoading, setLogoTypesLoading] = useState(true);
 
   // Auth state
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -40,6 +46,12 @@ export function AIProposalView({ proposal, legalData, intakeData }: { proposal: 
       setColors(proposal.colorPalette || []);
     }
   }, [proposal]);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/logo-types`, { headers: { 'Content-Type': 'application/json' } })
+      .then(r => r.json()).then(d => { if (Array.isArray(d)) setLogoTypes(d); })
+      .catch(() => {}).finally(() => setLogoTypesLoading(false));
+  }, []);
 
   if (!proposal) return null;
 
@@ -89,34 +101,7 @@ export function AIProposalView({ proposal, legalData, intakeData }: { proposal: 
     }
   };
 
-  const handleGenerateLogo = async () => {
-    const finalName = isEditingName ? customName : selectedName;
-    if (!finalName || !intakeData) {
-      alert("الرجاء اختيار اسم النشاط أولاً");
-      return;
-    }
-    
-    setGeneratingLogo(true);
-    try {
-      const response = await fetch(`${API_URL}/api/ai/generate-logo`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          brandName: finalName,
-          industry: intakeData.industry,
-          colors: colors
-        })
-      });
-      const data = await response.json();
-      if (data.logoUrl) {
-        setLogoUrl(data.logoUrl);
-      }
-    } catch (error) {
-      console.error('Failed to generate logo:', error);
-    } finally {
-      setGeneratingLogo(false);
-    }
-  };
+
 
   const submitApproval = async () => {
     setLoading(true);
@@ -124,6 +109,7 @@ export function AIProposalView({ proposal, legalData, intakeData }: { proposal: 
     const finalName = isEditingName ? customName : selectedName;
     
     try {
+      const chosenLogoType = logoTypes.find(lt => lt.id === selectedLogoTypeId);
       const finalData = {
         ...legalData,
         ...intakeData,
@@ -134,6 +120,8 @@ export function AIProposalView({ proposal, legalData, intakeData }: { proposal: 
         brandDescription: proposal.logoDescription,
         referenceLogos: referenceLogoUrl ? [referenceLogoUrl] : [],
         generatedLogoUrl: logoUrl,
+        selectedLogoType: selectedLogoTypeId || null,
+        selectedLogoTypeName: chosenLogoType?.name || null,
         slogan: proposal.slogan,
         brandColors: proposal.brandColors,
         typography: proposal.typography,
@@ -365,84 +353,63 @@ export function AIProposalView({ proposal, legalData, intakeData }: { proposal: 
             </div>
           )}
 
-          {/* Logo Description */}
-          {proposal.logoDescription && (
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-              <h3 className="text-lg font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                <FileText className="w-5 h-5 text-teal-500" /> وصف الشعار المقترح
-              </h3>
-              <p className="text-slate-600 leading-relaxed text-sm mb-4">{proposal.logoDescription}</p>
-
-              {/* Logo Generation & Upload Section */}
-              <div className="pt-4 border-t border-slate-100 mt-4">
-                <h4 className="text-md font-medium text-slate-800 mb-4">تصميم الشعار</h4>
-                
-                <div className="space-y-4">
-                  {/* Generated Logo Display */}
-                  {logoUrl && (
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col items-center justify-center">
-                      <span className="text-xs font-medium text-slate-500 mb-2">الشعار المبدئي المولد بالذكاء الاصطناعي</span>
-                      <img src={logoUrl} alt="Generated Logo" className="w-32 h-32 object-contain" />
-                    </div>
-                  )}
-
-                  <button
-                    onClick={handleGenerateLogo}
-                    disabled={generatingLogo}
-                    className="w-full py-2.5 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-medium border border-indigo-200 transition-all flex items-center justify-center gap-2 disabled:opacity-70"
-                  >
-                    {generatingLogo ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
-                    {generatingLogo ? 'جاري توليد الشعار...' : 'توليد شعار مبدئي بالذكاء الاصطناعي'}
-                  </button>
-
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-slate-200"></div>
-                    </div>
-                    <div className="relative flex justify-center text-sm">
-                      <span className="px-2 bg-white text-slate-400">أو</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                      <UploadCloud className="w-4 h-4 text-blue-500" /> إرفاق شعار مرجعي أعجبك (اختياري)
-                    </label>
-                    <div className="relative">
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        onChange={handleUploadReferenceLogo}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
-                      />
-                      <div className={`w-full px-4 py-4 border-2 border-dashed rounded-xl text-center transition-all ${
-                        referenceLogoUrl ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 hover:border-blue-400 bg-slate-50'
-                      }`}>
-                        {uploadingLogo ? (
-                          <div className="flex flex-col items-center gap-2">
-                            <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
-                            <p className="text-xs text-slate-500">جاري الرفع...</p>
-                          </div>
-                        ) : referenceLogoUrl ? (
-                          <div className="flex items-center justify-center gap-2">
-                            <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                            <p className="text-sm font-medium text-emerald-700">تم رفع الشعار المرجعي بنجاح</p>
-                          </div>
+          {/* Logo Type Selection */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+            <h3 className="text-lg font-semibold text-slate-800 mb-2 flex items-center gap-2">
+              <ImageIcon className="w-5 h-5 text-violet-500" /> 🎨 اختر نوع الشعار المفضل
+            </h3>
+            <p className="text-xs text-slate-500 mb-4">اختر النوع الذي يناسب علامتك التجارية — سيقوم فريق التصميم بتنفيذه</p>
+            {logoTypesLoading ? (
+              <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-violet-400" /></div>
+            ) : logoTypes.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-4">لا توجد أنواع شعارات متاحة حالياً</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {logoTypes.map(lt => {
+                  const isSel = selectedLogoTypeId === lt.id;
+                  return (
+                    <div key={lt.id} onClick={() => setSelectedLogoTypeId(lt.id)}
+                      className={`relative rounded-2xl overflow-hidden transition-all duration-300 cursor-pointer active:scale-[0.97]
+                        ${isSel ? 'ring-3 ring-emerald-400 shadow-xl shadow-emerald-500/20 scale-[1.02]' : 'ring-1 ring-slate-200 hover:ring-violet-300 hover:shadow-lg'}`}>
+                      <div className="bg-slate-900 p-5 flex items-center justify-center min-h-[110px]">
+                        {lt.imageUrl ? (
+                          <img src={lt.imageUrl} alt={lt.name} className="w-20 h-20 object-contain" />
                         ) : (
-                          <div className="flex flex-col items-center gap-1">
-                            <UploadCloud className="w-5 h-5 text-slate-400" />
-                            <p className="text-xs text-slate-500">اضغط لرفع صورة شعار كمرجع للمصمم</p>
+                          <div className="w-20 h-20 rounded-2xl bg-slate-800 flex items-center justify-center">
+                            <ImageIcon className="w-8 h-8 text-slate-600" />
                           </div>
                         )}
+                        {isSel && <div className="absolute top-2 left-2"><CheckCircle2 className="w-5 h-5 text-emerald-400 drop-shadow-lg" /></div>}
+                      </div>
+                      <div className={`p-3 text-center ${isSel ? 'bg-emerald-50' : 'bg-white'}`}>
+                        <h4 className={`font-bold text-xs ${isSel ? 'text-emerald-800' : 'text-slate-800'}`}>{lt.name}</h4>
+                        {lt.description && <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">{lt.description}</p>}
                       </div>
                     </div>
-                  </div>
-
-                </div>
+                  );
+                })}
               </div>
+            )}
+          </div>
 
+          {/* Reference Logo Upload */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+            <h3 className="text-lg font-semibold text-slate-800 mb-3 flex items-center gap-2">
+              <UploadCloud className="w-5 h-5 text-blue-500" /> إرفاق شعار مرجعي أعجبك (اختياري)
+            </h3>
+            <div className="relative">
+              <input type="file" accept="image/*" onChange={handleUploadReferenceLogo} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+              <div className={`w-full px-4 py-6 border-2 border-dashed rounded-xl text-center transition-all ${referenceLogoUrl ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 hover:border-blue-400 bg-slate-50'}`}>
+                {uploadingLogo ? (
+                  <div className="flex flex-col items-center gap-2"><Loader2 className="w-5 h-5 text-blue-500 animate-spin" /><p className="text-xs text-slate-500">جاري الرفع...</p></div>
+                ) : referenceLogoUrl ? (
+                  <div className="flex items-center justify-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-500" /><p className="text-sm font-medium text-emerald-700">تم رفع الشعار المرجعي بنجاح</p></div>
+                ) : (
+                  <div className="flex flex-col items-center gap-1"><UploadCloud className="w-5 h-5 text-slate-400" /><p className="text-xs text-slate-500">اضغط لرفع صورة شعار كمرجع للمصمم</p></div>
+                )}
+              </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
 
@@ -485,6 +452,8 @@ export function AIProposalView({ proposal, legalData, intakeData }: { proposal: 
                      logoDescription:  proposal.logoDescription,
                      referenceLogos:   referenceLogoUrl ? [referenceLogoUrl] : [],
                      generatedLogoUrl: logoUrl,
+                     selectedLogoType: selectedLogoTypeId || null,
+                     selectedLogoTypeName: logoTypes.find(lt => lt.id === selectedLogoTypeId)?.name || null,
                      businessName:     intakeData?.businessName,
                      industry:         intakeData?.industry,
                      description:      intakeData?.description,

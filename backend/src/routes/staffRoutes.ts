@@ -11,12 +11,14 @@ import { PrismaClient } from '@prisma/client';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { encrypt, decrypt } from '../utils/crypto';
 import { SLA_HOURS, STAGE_LABELS } from '../config/stages';
+import bcrypt from 'bcryptjs';
 
 const router = Router();
 const prisma = new PrismaClient();
 const DEFAULT_AGENCY_PROFILE = {
   agencyName: 'وكالة الإدارة الرقمية',
   contactEmail: 'admin@agency.com',
+  whatsappNumber: '',
 };
 const agencyProfile = { ...DEFAULT_AGENCY_PROFILE };
 const globalSlaConfig: Record<string, number> = { ...SLA_HOURS };
@@ -56,7 +58,7 @@ const FULL_TICKET_INCLUDE = {
   accountManager: { select: { id: true, name: true, email: true, role: true } },
   designer: { select: { id: true, name: true, email: true, role: true } },
   developer: { select: { id: true, name: true, email: true, role: true } },
-  qa: { select: { id: true, name: true, email: true, role: true } },
+  seoSpecialist: { select: { id: true, name: true, email: true, role: true } },
   auditLogs: {
     orderBy: { createdAt: 'desc' as const },
     take: 50,
@@ -85,8 +87,8 @@ router.get('/tickets', authenticateToken, async (req: AuthRequest, res) => {
       case 'DEVELOPER':
         whereClause = { ...whereClause, OR: [{ developerId: userId }, { stage: 'DEVELOPMENT' }] };
         break;
-      case 'QA':
-        whereClause = { ...whereClause, stage: 'REVIEW' };
+      case 'SEO':
+        whereClause = { ...whereClause };
         break;
       default:
         return res.json([]);
@@ -157,12 +159,12 @@ router.put(
         accountManagerId,
         designerId,
         developerId,
-        qaId,
+        seoSpecialistId,
         customSlaHours,
         amInstructions,
         designerInstructions,
         developerInstructions,
-        qaInstructions,
+        seoInstructions,
       } = req.body;
 
       const ticket = await prisma.ticket.findUnique({ where: { id } });
@@ -172,20 +174,13 @@ router.put(
       if (accountManagerId !== undefined) updateData.accountManagerId = accountManagerId || null;
       if (designerId !== undefined) updateData.designerId = designerId || null;
       if (developerId !== undefined) updateData.developerId = developerId || null;
-      if (qaId !== undefined) updateData.qaId = qaId || null;
+      if (seoSpecialistId !== undefined) updateData.seoSpecialistId = seoSpecialistId || null;
       if (customSlaHours !== undefined) updateData.customSlaHours = customSlaHours ? parseInt(customSlaHours) : null;
       if (amInstructions !== undefined) updateData.amInstructions = amInstructions?.trim() ? amInstructions.trim() : null;
       if (designerInstructions !== undefined) updateData.designerInstructions = designerInstructions?.trim() ? designerInstructions.trim() : null;
       if (developerInstructions !== undefined) updateData.developerInstructions = developerInstructions?.trim() ? developerInstructions.trim() : null;
-      if (qaInstructions !== undefined) updateData.qaInstructions = qaInstructions?.trim() ? qaInstructions.trim() : null;
+      if (seoInstructions !== undefined) updateData.seoInstructions = seoInstructions?.trim() ? seoInstructions.trim() : null;
 
-      const isNewAssignment = (designerId || developerId) &&
-        !ticket.designerId && !ticket.developerId;
-      
-      if (isNewAssignment && ticket.stage === 'INTAKE') {
-        updateData.stage = 'LEGAL_PROCESSING';
-        updateData.stageEnteredAt = new Date();
-      }
 
       const updated = await prisma.ticket.update({
         where: { id },
@@ -197,13 +192,13 @@ router.put(
       if (accountManagerId) assignedNames.push(`AM: ${updated.accountManager?.name}`);
       if (designerId) assignedNames.push(`Designer: ${updated.designer?.name}`);
       if (developerId) assignedNames.push(`Developer: ${updated.developer?.name}`);
-      if (qaId) assignedNames.push(`QA: ${updated.qa?.name}`);
+      if (seoSpecialistId) assignedNames.push(`SEO: ${updated.seoSpecialist?.name}`);
       if (customSlaHours) assignedNames.push(`SLA: ${customSlaHours}h`);
       if (
         amInstructions !== undefined ||
         designerInstructions !== undefined ||
         developerInstructions !== undefined ||
-        qaInstructions !== undefined
+        seoInstructions !== undefined
       ) assignedNames.push('Role instructions updated');
 
       await prisma.auditLog.create({
@@ -218,7 +213,7 @@ router.put(
               updateData.amInstructions ||
               updateData.designerInstructions ||
               updateData.developerInstructions ||
-              updateData.qaInstructions
+              updateData.seoInstructions
             ),
           }),
         },
@@ -280,59 +275,7 @@ router.put(
   }
 );
 
-// ════════════════════════════════════════════════════════════════
-// PUT /api/staff/tickets/:id/legal-processing
-// ════════════════════════════════════════════════════════════════
-// ════════════════════════════════════════════════════════════════
 
-router.put(
-  '/tickets/:id/legal-processing',
-  authenticateToken,
-  requireRole('ADMIN', 'ACCOUNT_MANAGER'),
-  async (req: AuthRequest, res) => {
-    try {
-      const { id } = req.params;
-      const { documentFileUrl, domainName, sallaStoreUrl, storeEmail, storePassword } = req.body;
-
-      const ticket = await prisma.ticket.findUnique({ where: { id } });
-      if (!ticket) return res.status(404).json({ error: 'الطلب غير موجود' });
-
-      // Update ClientInfo for documentFileUrl
-      if (documentFileUrl) {
-        await prisma.clientInfo.update({
-          where: { id: ticket.clientId },
-          data: { documentFileUrl, hasDocument: true, legalDocUrl: documentFileUrl, hasLegalDoc: true }
-        });
-      }
-
-      // Update or Create StoreDetails
-      const storeData: any = {};
-      if (domainName !== undefined) storeData.domainName = domainName;
-      if (sallaStoreUrl !== undefined) storeData.sallaStoreUrl = sallaStoreUrl;
-      if (storeEmail !== undefined) storeData.storeEmail = storeEmail;
-      if (storePassword) storeData.storePasswordEncrypted = encrypt(storePassword);
-
-      if (Object.keys(storeData).length > 0) {
-        const existingStore = await prisma.storeDetails.findUnique({ where: { ticketId: id } });
-        if (existingStore) {
-          await prisma.storeDetails.update({ where: { ticketId: id }, data: storeData });
-        } else {
-          await prisma.storeDetails.create({ data: { ticketId: id, ...storeData } });
-        }
-      }
-
-      const updated = await prisma.ticket.findUnique({
-        where: { id },
-        include: FULL_TICKET_INCLUDE
-      });
-
-      res.json(updated);
-    } catch (e: any) {
-      console.error('[staff/legal-processing] Error:', e.message);
-      res.status(500).json({ error: 'فشل حفظ البيانات القانونية' });
-    }
-  }
-);
 
 // ════════════════════════════════════════════════════════════════
 // PUT /api/staff/tickets/:id/design-files
@@ -390,7 +333,7 @@ router.put(
         ticket.accountManagerId === userId ||
         ticket.designerId === userId ||
         ticket.developerId === userId ||
-        ticket.qaId === userId;
+        ticket.seoSpecialistId === userId;
 
       if (!isAssigned && role !== 'ADMIN') {
         return res.status(403).json({ error: 'أنت غير معيّن لهذا الطلب' });
@@ -653,12 +596,13 @@ router.put(
   authenticateToken,
   requireRole('ADMIN'),
   async (req: AuthRequest, res) => {
-    const { agencyName, contactEmail } = req.body ?? {};
+    const { agencyName, contactEmail, whatsappNumber } = req.body ?? {};
     if (!agencyName || !contactEmail) {
       return res.status(400).json({ error: 'يرجى إدخال اسم الوكالة والبريد الإلكتروني' });
     }
     agencyProfile.agencyName = agencyName;
     agencyProfile.contactEmail = contactEmail;
+    if (whatsappNumber !== undefined) agencyProfile.whatsappNumber = whatsappNumber || '';
     res.json({ message: 'تم حفظ بيانات الوكالة', agencyProfile });
   }
 );
@@ -732,6 +676,7 @@ router.delete(
       // Delete related records first
       await prisma.notification.deleteMany({ where: { ticketId: id } });
       await prisma.auditLog.deleteMany({ where: { ticketId: id } });
+      await prisma.seoChecklist.deleteMany({ where: { ticketId: id } });
       if (ticket.clientId) {
         const otherTickets = await prisma.ticket.count({ where: { clientId: ticket.clientId, id: { not: id } } });
         // Delete AI proposal and store details
@@ -748,6 +693,131 @@ router.delete(
       console.error('[delete-ticket] Error:', e.message);
       res.status(500).json({ error: 'فشل حذف الطلب' });
     }
+  }
+);
+
+// ════════════════════════════════════════════════════════════════
+// POST /api/staff/create — Create new staff member (ADMIN only)
+// ════════════════════════════════════════════════════════════════
+router.post(
+  '/create',
+  authenticateToken,
+  requireRole('ADMIN'),
+  async (req: AuthRequest, res) => {
+    try {
+      const { name, email, role } = req.body;
+      if (!name?.trim() || !email?.trim() || !role) {
+        return res.status(400).json({ error: 'الاسم والبريد الإلكتروني والدور مطلوبين' });
+      }
+      const validRoles = ['ACCOUNT_MANAGER', 'SEO', 'DESIGNER', 'DEVELOPER'];
+      if (!validRoles.includes(role)) {
+        return res.status(400).json({ error: 'الدور غير صالح' });
+      }
+      const existing = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+      if (existing) {
+        return res.status(409).json({ error: 'البريد الإلكتروني مسجل مسبقاً' });
+      }
+      const passwordHash = await bcrypt.hash('123456', 10);
+      const user = await prisma.user.create({
+        data: { name: name.trim(), email: email.trim().toLowerCase(), role, passwordHash }
+      });
+      res.json(user);
+    } catch (e: any) {
+      console.error('[staff/create] Error:', e.message);
+      res.status(500).json({ error: 'فشل إنشاء الموظف' });
+    }
+  }
+);
+
+// ════════════════════════════════════════════════════════════════
+// PUT /api/staff/:id/update — Update staff name/role (ADMIN only)
+// ════════════════════════════════════════════════════════════════
+router.put(
+  '/:id/update',
+  authenticateToken,
+  requireRole('ADMIN'),
+  async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { name, role } = req.body;
+      const user = await prisma.user.findUnique({ where: { id } });
+      if (!user) return res.status(404).json({ error: 'الموظف غير موجود' });
+      const data: any = {};
+      if (name?.trim()) data.name = name.trim();
+      if (role) {
+        const validRoles = ['ADMIN', 'ACCOUNT_MANAGER', 'SEO', 'DESIGNER', 'DEVELOPER'];
+        if (!validRoles.includes(role)) return res.status(400).json({ error: 'الدور غير صالح' });
+        data.role = role;
+      }
+      const updated = await prisma.user.update({ where: { id }, data });
+      res.json(updated);
+    } catch (e: any) {
+      console.error('[staff/update] Error:', e.message);
+      res.status(500).json({ error: 'فشل تحديث الموظف' });
+    }
+  }
+);
+
+// ════════════════════════════════════════════════════════════════
+// PUT /api/staff/:id/reset-password — Reset to default 123456
+// ════════════════════════════════════════════════════════════════
+router.put(
+  '/:id/reset-password',
+  authenticateToken,
+  requireRole('ADMIN'),
+  async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const user = await prisma.user.findUnique({ where: { id } });
+      if (!user) return res.status(404).json({ error: 'الموظف غير موجود' });
+      const passwordHash = await bcrypt.hash('123456', 10);
+      await prisma.user.update({ where: { id }, data: { passwordHash } });
+      res.json({ message: `تم إعادة تعيين كلمة مرور ${user.name}` });
+    } catch (e: any) {
+      console.error('[staff/reset-password] Error:', e.message);
+      res.status(500).json({ error: 'فشل إعادة تعيين كلمة المرور' });
+    }
+  }
+);
+
+// ════════════════════════════════════════════════════════════════
+// GET /api/staff/by-role/:role — Get active staff by role
+// ════════════════════════════════════════════════════════════════
+router.get(
+  '/by-role/:role',
+  authenticateToken,
+  async (req: AuthRequest, res) => {
+    try {
+      const role = req.params.role;
+      const validRoles = ['ADMIN', 'ACCOUNT_MANAGER', 'SEO', 'DESIGNER', 'DEVELOPER'];
+      if (!validRoles.includes(role)) {
+        return res.status(400).json({ error: 'الدور غير صالح' });
+      }
+      const users = await prisma.user.findMany({
+        where: { role, isActive: true },
+        select: { id: true, name: true, email: true, role: true },
+        orderBy: { name: 'asc' },
+      });
+      res.json(users);
+    } catch (e: any) {
+      console.error('[staff/by-role] Error:', e.message);
+      res.status(500).json({ error: 'فشل جلب الموظفين' });
+    }
+  }
+);
+
+// ════════════════════════════════════════════════════════════════
+// GET /api/staff/settings/agency — Public agency info (any authenticated user)
+// ════════════════════════════════════════════════════════════════
+router.get(
+  '/settings/agency',
+  authenticateToken,
+  async (_req: AuthRequest, res) => {
+    res.json({
+      agencyName: agencyProfile.agencyName,
+      contactEmail: agencyProfile.contactEmail,
+      whatsappNumber: agencyProfile.whatsappNumber,
+    });
   }
 );
 

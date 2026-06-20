@@ -1,26 +1,37 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, Save, Settings, Lock, KeyRound, CheckCircle2 } from 'lucide-react';
+import { Loader2, Save, Settings, Lock, KeyRound, CheckCircle2, MessageSquare, Paintbrush, Plus, Trash2, ChevronUp, ChevronDown, ToggleLeft, ToggleRight, Upload, Image as ImageIcon } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
-
+import { useToast } from '../../components/ui/Toast';
 
 import { API_URL } from '../../config/api';
 
 const API = API_URL;
 
+const STAGE_LABELS: Record<string, string> = {
+  INTAKE: 'استلام الطلب',
+  SEO_STORE_SETUP: 'إعدادات الـ SEO',
+  DESIGN: 'التصميم',
+  DEVELOPMENT: 'التطوير والبرمجة',
+  SEO_FINAL: 'المراجعة النهائية وSEO',
+  DELIVERED: 'تم التسليم',
+};
+
 type SettingsPayload = {
   agencyProfile: {
     agencyName: string;
     contactEmail: string;
+    whatsappNumber: string;
   };
   slaConfig: Record<string, number>;
 };
 
 export function AdminSettings() {
   const { token, user } = useAuthStore();
+  const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [editingStage, setEditingStage] = useState<string | null>(null);
-  const [agencyProfile, setAgencyProfile] = useState({ agencyName: '', contactEmail: '' });
+  const [agencyProfile, setAgencyProfile] = useState({ agencyName: '', contactEmail: '', whatsappNumber: '' });
   const [slaConfig, setSlaConfig] = useState<Record<string, number>>({});
 
   // Password change state
@@ -30,6 +41,30 @@ export function AdminSettings() {
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
+
+  // Logo types state
+  type LogoTypeItem = { id: string; name: string; description?: string; imageUrl?: string; sortOrder: number; isActive: boolean };
+  const [logoTypes, setLogoTypes] = useState<LogoTypeItem[]>([]);
+  const [logoLoading, setLogoLoading] = useState(true);
+  const [newLogoName, setNewLogoName] = useState('');
+  const [newLogoDesc, setNewLogoDesc] = useState('');
+  const [editingLogo, setEditingLogo] = useState<LogoTypeItem | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editImageUrl, setEditImageUrl] = useState('');
+  const [logoSaving, setLogoSaving] = useState(false);
+  const [newImageUrl, setNewImageUrl] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  const uploadLogoImage = async (file: File): Promise<string | null> => {
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>(resolve => { reader.onloadend = () => resolve(reader.result as string); reader.readAsDataURL(file); });
+      const res = await fetch(`${API}/api/upload`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fileName: `logo-type-${Date.now()}-${file.name}`, fileData: base64 }) });
+      if (res.ok) { const r = await res.json(); return r.url; }
+    } catch (e) { console.error('Upload error:', e); }
+    return null;
+  };
 
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
@@ -46,7 +81,13 @@ export function AdminSettings() {
         setLoading(false);
       }
     };
-    fetchSettings();
+    const fetchLogoTypes = async () => {
+      try {
+        const res = await fetch(`${API}/api/logo-types/all`, { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) setLogoTypes(await res.json());
+      } finally { setLogoLoading(false); }
+    };
+    fetchSettings(); fetchLogoTypes();
   }, [token]);
 
   const saveProfile = async (e: React.FormEvent) => {
@@ -58,9 +99,11 @@ export function AdminSettings() {
         headers,
         body: JSON.stringify(agencyProfile),
       });
-      if (!res.ok) {
+      if (res.ok) {
+        showToast('تم حفظ بيانات الوكالة ✅');
+      } else {
         const err = await res.json();
-        alert(err.error || 'فشل حفظ بيانات الوكالة');
+        showToast(err.error || 'فشل حفظ بيانات الوكالة', 'error');
       }
     } finally {
       setSavingProfile(false);
@@ -75,9 +118,11 @@ export function AdminSettings() {
         headers,
         body: JSON.stringify({ hours: slaConfig[stage] }),
       });
-      if (!res.ok) {
+      if (res.ok) {
+        showToast('تم تحديث SLA ✅');
+      } else {
         const err = await res.json();
-        alert(err.error || 'فشل تحديث SLA');
+        showToast(err.error || 'فشل تحديث SLA', 'error');
       }
     } finally {
       setEditingStage(null);
@@ -197,7 +242,7 @@ export function AdminSettings() {
             <button
               type="submit"
               disabled={passwordLoading}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 sm:py-2.5 text-sm font-bold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all duration-200 disabled:opacity-60 active:scale-95"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 sm:py-2.5 text-sm font-bold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all duration-200 disabled:opacity-60 active:scale-95 cursor-pointer"
             >
               {passwordLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
               تغيير كلمة المرور
@@ -208,28 +253,50 @@ export function AdminSettings() {
 
       {isAdmin && (
       <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-        <h2 className="font-bold text-slate-800 mb-4">Agency Profile</h2>
+        <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+          <Settings className="w-5 h-5 text-indigo-500" /> بيانات الوكالة
+        </h2>
         <form onSubmit={saveProfile} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <input
-            value={agencyProfile.agencyName}
-            onChange={(e) => setAgencyProfile((prev) => ({ ...prev, agencyName: e.target.value }))}
-            className="w-full p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300"
-            placeholder="Agency Name"
-            required
-          />
-          <input
-            value={agencyProfile.contactEmail}
-            onChange={(e) => setAgencyProfile((prev) => ({ ...prev, contactEmail: e.target.value }))}
-            className="w-full p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300"
-            placeholder="Contact Email"
-            type="email"
-            required
-          />
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-500">اسم الوكالة</label>
+            <input
+              value={agencyProfile.agencyName}
+              onChange={(e) => setAgencyProfile((prev) => ({ ...prev, agencyName: e.target.value }))}
+              className="w-full p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300"
+              placeholder="اسم الوكالة"
+              required
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-500">البريد الإلكتروني</label>
+            <input
+              value={agencyProfile.contactEmail}
+              onChange={(e) => setAgencyProfile((prev) => ({ ...prev, contactEmail: e.target.value }))}
+              className="w-full p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300"
+              placeholder="admin@agency.com"
+              type="email"
+              required
+            />
+          </div>
+          <div className="md:col-span-2 space-y-1.5">
+            <label className="text-xs font-bold text-slate-500 flex items-center gap-1.5">
+              <MessageSquare className="w-3.5 h-3.5 text-emerald-500" /> رقم واتساب الاستشاري
+            </label>
+            <input
+              value={agencyProfile.whatsappNumber}
+              onChange={(e) => setAgencyProfile((prev) => ({ ...prev, whatsappNumber: e.target.value }))}
+              className="w-full p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300"
+              placeholder="مثال: 966501234567"
+              type="tel"
+              dir="ltr"
+            />
+            <p className="text-[10px] text-slate-400">هذا الرقم سيظهر للعملاء عند الضغط على "تواصل مع الاستشاري"</p>
+          </div>
           <div className="md:col-span-2">
             <button
               type="submit"
               disabled={savingProfile}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-60"
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-60 cursor-pointer"
             >
               {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               حفظ بيانات الوكالة
@@ -241,20 +308,22 @@ export function AdminSettings() {
 
       {isAdmin && (
       <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-        <h2 className="font-bold text-slate-800 mb-4">Global SLA Config</h2>
+        <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+          <Settings className="w-5 h-5 text-indigo-500" /> إعدادات SLA العامة
+        </h2>
         <div className="overflow-hidden rounded-xl border border-slate-200">
           <table className="w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="text-right p-3 font-bold text-slate-600">Stage</th>
-                <th className="text-right p-3 font-bold text-slate-600">SLA (hours)</th>
-                <th className="text-right p-3 font-bold text-slate-600">Actions</th>
+                <th className="text-right p-3 font-bold text-slate-600">المرحلة</th>
+                <th className="text-right p-3 font-bold text-slate-600">SLA (ساعات)</th>
+                <th className="text-right p-3 font-bold text-slate-600">إجراءات</th>
               </tr>
             </thead>
             <tbody>
               {Object.entries(slaConfig).map(([stage, hours]) => (
                 <tr key={stage} className="border-t border-slate-100">
-                  <td className="p-3 font-medium text-slate-700">{stage}</td>
+                  <td className="p-3 font-medium text-slate-700">{STAGE_LABELS[stage] || stage}</td>
                   <td className="p-3 w-56">
                     <input
                       type="number"
@@ -264,16 +333,17 @@ export function AdminSettings() {
                         setSlaConfig((prev) => ({ ...prev, [stage]: Number(e.target.value || 0) }))
                       }
                       className="w-full p-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                      dir="ltr"
                     />
                   </td>
                   <td className="p-3">
                     <button
                       onClick={() => saveSlaStage(stage)}
                       disabled={editingStage === stage}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold bg-slate-900 text-white hover:bg-slate-700 transition-colors disabled:opacity-60"
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold bg-slate-900 text-white hover:bg-slate-700 transition-colors disabled:opacity-60 cursor-pointer"
                     >
                       {editingStage === stage ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Settings className="w-3.5 h-3.5" />}
-                      Edit
+                      تعديل
                     </button>
                   </td>
                 </tr>
@@ -281,6 +351,131 @@ export function AdminSettings() {
             </tbody>
           </table>
         </div>
+      </section>
+      )}
+
+      {/* Logo Types Management */}
+      {isAdmin && (
+      <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+        <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+          <Paintbrush className="w-5 h-5 text-violet-500" /> إدارة أنواع الشعارات
+        </h2>
+
+        {/* Add new */}
+        <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 mb-4 space-y-3">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input value={newLogoName} onChange={e => setNewLogoName(e.target.value)} placeholder="اسم النوع (مطلوب)" className="flex-1 p-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 bg-white" />
+            <input value={newLogoDesc} onChange={e => setNewLogoDesc(e.target.value)} placeholder="وصف قصير (اختياري)" className="flex-1 p-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 bg-white" />
+          </div>
+          <div className="flex items-center gap-3">
+            {newImageUrl ? (
+              <div className="relative">
+                <img src={newImageUrl} alt="preview" className="w-12 h-12 rounded-lg object-contain bg-white border border-slate-200 p-0.5" />
+                <button onClick={() => setNewImageUrl('')} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center text-[8px] cursor-pointer">✕</button>
+              </div>
+            ) : (
+              <label className={`flex items-center gap-2 px-3 py-2 border border-dashed border-slate-300 rounded-xl text-xs text-slate-500 hover:border-violet-400 hover:text-violet-600 transition-colors cursor-pointer ${uploadingImage ? 'opacity-50' : ''}`}>
+                <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={async (e) => {
+                  const file = e.target.files?.[0]; if (!file) return;
+                  setUploadingImage(true);
+                  const url = await uploadLogoImage(file);
+                  if (url) setNewImageUrl(url);
+                  else showToast('فشل رفع الصورة', 'error');
+                  setUploadingImage(false); e.target.value = '';
+                }} />
+                {uploadingImage ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                صورة توضيحية
+              </label>
+            )}
+            <button disabled={logoSaving || !newLogoName.trim()} onClick={async () => {
+              setLogoSaving(true);
+              try {
+                const res = await fetch(`${API}/api/logo-types`, { method: 'POST', headers, body: JSON.stringify({ name: newLogoName, description: newLogoDesc, imageUrl: newImageUrl || null }) });
+                if (res.ok) { const t = await res.json(); setLogoTypes(prev => [...prev, t]); setNewLogoName(''); setNewLogoDesc(''); setNewImageUrl(''); showToast('تم إضافة نوع الشعار ✅'); }
+                else { const e = await res.json(); showToast(e.error || 'فشل الإضافة', 'error'); }
+              } finally { setLogoSaving(false); }
+            }} className="mr-auto px-4 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-bold hover:bg-violet-700 disabled:opacity-50 flex items-center gap-2 cursor-pointer whitespace-nowrap">
+              <Plus className="w-4 h-4" /> إضافة
+            </button>
+          </div>
+        </div>
+
+        {logoLoading ? <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-violet-400" /></div> : (
+        <div className="space-y-2">
+          {logoTypes.map((lt, idx) => (
+            <div key={lt.id} className={`flex items-center gap-3 p-3 rounded-xl border ${lt.isActive ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-60'}`}>
+              {editingLogo?.id === lt.id ? (
+                <div className="flex-1 space-y-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input value={editName} onChange={e => setEditName(e.target.value)} className="flex-1 p-2 border border-slate-200 rounded-lg text-sm" />
+                    <input value={editDesc} onChange={e => setEditDesc(e.target.value)} className="flex-1 p-2 border border-slate-200 rounded-lg text-sm" placeholder="وصف" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {editImageUrl ? (
+                      <div className="relative">
+                        <img src={editImageUrl} alt="preview" className="w-10 h-10 rounded-lg object-contain bg-white border p-0.5" />
+                        <button onClick={() => setEditImageUrl('')} className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center text-[8px] cursor-pointer">✕</button>
+                      </div>
+                    ) : (
+                      <label className="flex items-center gap-1.5 px-2.5 py-1.5 border border-dashed border-slate-300 rounded-lg text-[11px] text-slate-500 hover:border-violet-400 cursor-pointer">
+                        <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={async (e) => {
+                          const file = e.target.files?.[0]; if (!file) return;
+                          setUploadingImage(true);
+                          const url = await uploadLogoImage(file);
+                          if (url) setEditImageUrl(url);
+                          setUploadingImage(false); e.target.value = '';
+                        }} />
+                        <Upload className="w-3 h-3" /> صورة
+                      </label>
+                    )}
+                    <button onClick={async () => {
+                      const res = await fetch(`${API}/api/logo-types/${lt.id}`, { method: 'PUT', headers, body: JSON.stringify({ name: editName, description: editDesc, imageUrl: editImageUrl || null }) });
+                      if (res.ok) { const u = await res.json(); setLogoTypes(prev => prev.map(x => x.id === lt.id ? u : x)); setEditingLogo(null); showToast('تم التعديل ✅'); }
+                    }} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer">حفظ</button>
+                    <button onClick={() => setEditingLogo(null)} className="px-3 py-1.5 bg-slate-200 text-slate-600 rounded-lg text-xs font-bold cursor-pointer">إلغاء</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {lt.imageUrl ? (
+                    <img src={lt.imageUrl} alt={lt.name} className="w-[50px] h-[50px] rounded-lg object-contain bg-slate-900 border border-slate-200 p-1 shrink-0" />
+                  ) : (
+                    <div className="w-[50px] h-[50px] rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0"><ImageIcon className="w-5 h-5 text-slate-300" /></div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-slate-800 truncate">{lt.name}</p>
+                    {lt.description && <p className="text-[11px] text-slate-500 truncate">{lt.description}</p>}
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">#{lt.sortOrder}</span>
+                  <button onClick={() => { setEditingLogo(lt); setEditName(lt.name); setEditDesc(lt.description || ''); setEditImageUrl(lt.imageUrl || ''); }} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 cursor-pointer" title="تعديل"><Settings className="w-3.5 h-3.5" /></button>
+                  <button onClick={async () => {
+                    const res = await fetch(`${API}/api/logo-types/${lt.id}`, { method: 'PUT', headers, body: JSON.stringify({ isActive: !lt.isActive }) });
+                    if (res.ok) { const u = await res.json(); setLogoTypes(prev => prev.map(x => x.id === lt.id ? u : x)); showToast(lt.isActive ? 'تم التعطيل' : 'تم التفعيل'); }
+                  }} className="p-1.5 hover:bg-slate-100 rounded-lg cursor-pointer" title={lt.isActive ? 'تعطيل' : 'تفعيل'}>
+                    {lt.isActive ? <ToggleRight className="w-4 h-4 text-emerald-500" /> : <ToggleLeft className="w-4 h-4 text-slate-400" />}
+                  </button>
+                  {idx > 0 && <button onClick={async () => {
+                    const newOrder = [...logoTypes]; const prev = newOrder[idx - 1]; [newOrder[idx - 1], newOrder[idx]] = [newOrder[idx], prev];
+                    setLogoTypes(newOrder);
+                    await fetch(`${API}/api/logo-types/reorder`, { method: 'PUT', headers, body: JSON.stringify({ ids: newOrder.map(x => x.id) }) });
+                  }} className="p-1 hover:bg-slate-100 rounded cursor-pointer"><ChevronUp className="w-3.5 h-3.5 text-slate-400" /></button>}
+                  {idx < logoTypes.length - 1 && <button onClick={async () => {
+                    const newOrder = [...logoTypes]; const next = newOrder[idx + 1]; [newOrder[idx], newOrder[idx + 1]] = [next, newOrder[idx]];
+                    setLogoTypes(newOrder);
+                    await fetch(`${API}/api/logo-types/reorder`, { method: 'PUT', headers, body: JSON.stringify({ ids: newOrder.map(x => x.id) }) });
+                  }} className="p-1 hover:bg-slate-100 rounded cursor-pointer"><ChevronDown className="w-3.5 h-3.5 text-slate-400" /></button>}
+                  <button onClick={async () => {
+                    if (!confirm('هل أنت متأكد من حذف هذا النوع؟')) return;
+                    const res = await fetch(`${API}/api/logo-types/${lt.id}`, { method: 'DELETE', headers });
+                    if (res.ok) { setLogoTypes(prev => prev.filter(x => x.id !== lt.id)); showToast('تم الحذف'); }
+                  }} className="p-1.5 hover:bg-red-50 rounded-lg text-red-400 hover:text-red-600 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                </>
+              )}
+            </div>
+          ))}
+          {logoTypes.length === 0 && <p className="text-sm text-slate-400 text-center py-4">لا توجد أنواع شعارات بعد</p>}
+        </div>
+        )}
       </section>
       )}
     </div>

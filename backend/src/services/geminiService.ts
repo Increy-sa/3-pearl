@@ -163,13 +163,31 @@ export async function generateBrandProposal(businessName: string, industry: stri
   throw lastError || new Error("All AI models failed");
 }
 
-export async function generateLogoSVG(brandName: string, industry: string, colors: string[]): Promise<string> {
+export async function generateLogoSVG(brandName: string, industry: string, colors: string[], baseUrl?: string): Promise<string> {
   const modelNames = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
   const genAI = getGenAI();
+  const fs = require('fs');
+  const path = require('path');
+  const uploadsDir = path.resolve(__dirname, '../../uploads');
+
+  // Ensure uploads directory exists
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
 
   const prompt = `Create a clean minimalist SVG logo for "${brandName}" in the ${industry} industry. 
   Use colors: ${colors.join(', ')}. 
   Output ONLY the raw SVG code, no markdown, no explanation, just the SVG element.`;
+
+  /**
+   * Save SVG content to a file and return the URL
+   */
+  const saveSvgFile = (svgContent: string): string => {
+    const fileName = `logo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.svg`;
+    fs.writeFileSync(path.join(uploadsDir, fileName), svgContent, 'utf-8');
+    const base = baseUrl || process.env.BASE_URL || 'http://localhost:5000';
+    return `${base}/uploads/${fileName}`;
+  };
 
   for (const modelName of modelNames) {
     try {
@@ -185,8 +203,7 @@ export async function generateLogoSVG(brandName: string, industry: string, color
       const svgMatch = text.match(/<svg[\s\S]*<\/svg>/i);
       if (svgMatch) {
         console.log(`[AI] ✅ Logo generated with ${modelName}`);
-        const svg = svgMatch[0];
-        return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+        return saveSvgFile(svgMatch[0]);
       }
       throw new Error("No valid SVG found in response");
     } catch (error: any) {
@@ -200,10 +217,9 @@ export async function generateLogoSVG(brandName: string, industry: string, color
 
   // Graceful fallback SVG with brand colors
   const primaryColor = colors[0] || "#1e293b";
-  const secondaryColor = colors[1] || "#64748b";
   const fallbackSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
   <rect width="200" height="200" rx="20" fill="${primaryColor}"/>
   <text x="100" y="115" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="white">${brandName.slice(0, 10)}</text>
   </svg>`;
-  return `data:image/svg+xml;base64,${Buffer.from(fallbackSVG).toString('base64')}`;
+  return saveSvgFile(fallbackSVG);
 }

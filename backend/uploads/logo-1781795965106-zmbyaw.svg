@@ -1,0 +1,28 @@
+<svg width="400" height="150" viewBox="0 0 400 150" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      @font-face {
+        font-family: 'ArabicElegant';
+        src: local('Amiri'), local('Noto Sans Arabic UI'), local('Scheherazade New'), sans-serif;
+      }
+      .logo-text {
+        font-family: 'ArabicElegant';
+        font-size: 55px;
+        font-weight: bold;
+        fill: #232e2e; /* Dark Slate color for main text */
+        text-anchor: middle;
+      }
+    </style>
+  </defs>
+
+  <!-- Group to center the logo elements within the SVG viewBox -->
+  <g transform="translate(200, 75)"> 
+    <!-- The text "إشراق فاشن" -->
+    <!-- Positioned slightly above the vertical center of the group -->
+    <text x="0" y="-10" class="logo-text">إشراق فاشن</text>
+
+    <!-- A minimalist accent curve below the text -->
+    <!-- This curve hints at elegance, a fabric drape, or a signature stroke, using the vibrant pink -->
+    <path d="M -130 20 Q 0 35 130 20" stroke="#FF007F" stroke-width="4" fill="none" stroke-linecap="round"/>
+  </g>
+</svg>

@@ -5,7 +5,7 @@ import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { API_URL } from '../../config/api';
 
 const ROLE_DISPLAY: Record<string, string> = {
-  ADMIN: 'مدير النظام', ACCOUNT_MANAGER: 'مدير حساب', DESIGNER: 'مصمم', DEVELOPER: 'مطوّر', QA: 'مراجع جودة',
+  ADMIN: 'مدير النظام', ACCOUNT_MANAGER: 'مدير حساب', DESIGNER: 'مصمم', DEVELOPER: 'مطوّر', SEO: 'مختص SEO',
 };
 
 export function DashboardLayout() {

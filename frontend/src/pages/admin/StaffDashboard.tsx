@@ -12,16 +12,13 @@ const API = API_URL;
 
 const STAGE_CONFIG: Record<string, { label: string; color: string; bg: string; dot: string }> = {
   INTAKE:                   { label: 'استلام الطلب',           color: 'text-sky-700',      bg: 'bg-sky-50 border-sky-200',         dot: 'bg-sky-500' },
-  LEGAL_PROCESSING:         { label: 'المعالجة القانونية', color: 'text-amber-700',    bg: 'bg-amber-50 border-amber-200',     dot: 'bg-amber-500' },
+  SEO_STORE_SETUP:          { label: 'إعدادات الـ SEO',     color: 'text-teal-700',     bg: 'bg-teal-50 border-teal-200',       dot: 'bg-teal-500' },
   DESIGN:                   { label: 'التصميم',             color: 'text-violet-700',   bg: 'bg-violet-50 border-violet-200',   dot: 'bg-violet-500' },
-  PENDING_CLIENT_APPROVAL:  { label: 'بانتظار اعتماد العميل', color: 'text-purple-700',   bg: 'bg-purple-50 border-purple-200',   dot: 'bg-purple-500' },
-  CLIENT_APPROVED:          { label: 'معتمد من العميل',      color: 'text-emerald-700',  bg: 'bg-emerald-50 border-emerald-200', dot: 'bg-emerald-500' },
-  CLIENT_REVISION:          { label: 'طلب تعديل من العميل',  color: 'text-red-700',      bg: 'bg-red-50 border-red-200',         dot: 'bg-red-500' },
   DEVELOPMENT:              { label: 'التطوير',            color: 'text-blue-700',     bg: 'bg-blue-50 border-blue-200',       dot: 'bg-blue-500' },
-  REVIEW:                   { label: 'المراجعة',           color: 'text-orange-700',   bg: 'bg-orange-50 border-orange-200',   dot: 'bg-orange-500' },
+  SEO_FINAL:                { label: 'المراجعة النهائية',  color: 'text-emerald-700',  bg: 'bg-emerald-50 border-emerald-200', dot: 'bg-emerald-500' },
   DELIVERED:                { label: 'تم التسليم',         color: 'text-emerald-700',  bg: 'bg-emerald-50 border-emerald-200', dot: 'bg-emerald-500' },
 };
-const STAGES_ORDER = ['INTAKE','LEGAL_PROCESSING','DESIGN','PENDING_CLIENT_APPROVAL','CLIENT_APPROVED','CLIENT_REVISION','DEVELOPMENT','REVIEW','DELIVERED'];
+const STAGES_ORDER = ['INTAKE','SEO_STORE_SETUP','DESIGN','DEVELOPMENT','SEO_FINAL','DELIVERED'];
 
 const canAssign      = (r: string) => ['ADMIN','ACCOUNT_MANAGER'].includes(r);
 const canManage      = (r: string) => ['ADMIN','ACCOUNT_MANAGER'].includes(r);

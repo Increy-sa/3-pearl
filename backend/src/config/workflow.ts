@@ -18,13 +18,7 @@ export function areChecklistItemsComplete(stage: string, currentChecklist: { tex
 export function getRoleForStage(stage: string): string | null {
   switch (stage) {
     case 'DESIGN': return 'DESIGNER';
-    case 'CLIENT_REVISION': return 'DESIGNER';
-    case 'CLIENT_APPROVED': return 'DESIGNER';
     case 'DEVELOPMENT': return 'DEVELOPER';
-    case 'DEVELOPMENT_REVISION': return 'DEVELOPER';   // Back to developer
-    case 'PENDING_AM_REVIEW': return 'ACCOUNT_MANAGER'; // Notify AM
-    case 'REVIEW': return 'QA';
-    case 'LEGAL_PROCESSING': return 'ACCOUNT_MANAGER';
     default: return null;
   }
 }
