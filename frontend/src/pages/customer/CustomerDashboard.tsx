@@ -453,7 +453,7 @@ function SupplierCustomerSection({ ticket, token }: { ticket: any; token: string
             <div className="flex items-center gap-3 p-3 bg-teal-50 rounded-xl border border-teal-200">
               <ExternalLink className="w-5 h-5 text-teal-600 shrink-0" />
               <span className="flex-1 text-sm font-bold text-teal-800">رابط المنتجات</span>
-              <a href={selection.productLink} target="_blank" rel="noreferrer"
+              <a href={ensureUrl(selection.productLink)} target="_blank" rel="noreferrer"
                 className="px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-bold text-xs cursor-pointer flex items-center gap-1.5">
                 <ExternalLink className="w-3.5 h-3.5" /> فتح الرابط
               </a>

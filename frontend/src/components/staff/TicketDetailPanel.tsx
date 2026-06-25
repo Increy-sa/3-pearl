@@ -1270,7 +1270,7 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
                         <div className="flex items-center gap-2 p-2.5 bg-white rounded-lg border border-teal-200 text-xs">
                           <ExternalLink className="w-3.5 h-3.5 text-teal-600 shrink-0" />
                           <span className="flex-1 truncate text-teal-800 font-bold">رابط المنتجات</span>
-                          <a href={ss.productLink} target="_blank" rel="noreferrer"
+                          <a href={ensureUrl(ss.productLink)} target="_blank" rel="noreferrer"
                             className="px-2 py-1 bg-teal-50 text-teal-600 rounded-lg hover:bg-teal-100 transition-colors font-bold cursor-pointer flex items-center gap-1">
                             <ExternalLink className="w-3 h-3" /> فتح
                           </a>
