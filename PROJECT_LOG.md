@@ -1,8 +1,8 @@
 # 📋 PROJECT LOG — Fawri.net (Salla Automated E-Commerce Onboarding Platform)
 
-> **Last Updated:** June 18, 2026  
-> **Version:** 3.0.0  
-> **Status:** Production-Ready — 6-Stage Workflow  
+> **Last Updated:** June 24, 2026  
+> **Version:** 4.3.0  
+> **Status:** Production-Ready — 6-Stage Workflow + RBAC Enhancements + File Preview  
 > **Domain:** fawri.net  
 > **Repository:** https://github.com/ahmedhelm-y/Salla-Task-Manager.git
 
@@ -18,7 +18,7 @@ This platform is an **automated e-commerce store onboarding system** built for t
 Adtopia Webhook → INTAKE → SEO_STORE_SETUP → DESIGN → DEVELOPMENT → SEO_FINAL → DELIVERED
 ```
 
-A new customer arrives via the Adtopia advertising webhook (or direct signup), fills out their legal and business information, receives AI-generated brand suggestions (names, color palettes, and SVG logos), selects their preferences, and is immediately onboarded with a personalized tracking dashboard. Internal staff manage the pipeline through a separate RBAC-protected admin dashboard with archive/delete capabilities.
+A new customer arrives via the Adtopia advertising webhook (or direct signup), fills out their legal and business information, receives AI-generated brand suggestions (names, color palettes), selects their preferred logo type from admin-managed options, and is immediately onboarded with a personalized tracking dashboard. Internal staff manage the pipeline through a separate RBAC-protected admin dashboard with archive/delete capabilities.
 
 ---
 
@@ -75,10 +75,10 @@ Six distinct roles with granular permissions:
 | Role | Dashboard Access | Archive/Delete | Approve Docs | Manage Staff | Settings |
 |------|:---:|:---:|:---:|:---:|:---:|
 | **ADMIN** | ✅ Full | ✅ | ✅ | ✅ | ✅ Full |
-| **ACCOUNT_MANAGER** | ✅ Full | ✅ | ✅ | ❌ | ✅ Password only |
-| **DESIGNER** | ✅ Assigned tickets | ❌ | ❌ | ❌ | ✅ Password only |
-| **DEVELOPER** | ✅ Assigned tickets | ❌ | ❌ | ❌ | ✅ Password only |
-| **SEO** | ✅ All tickets | ❌ | ❌ | ❌ | ✅ Password only |
+| **ACCOUNT_MANAGER** | ✅ Full | ✅ | ✅ | ✅ (except ADMIN) | ✅ Password only |
+| **DESIGNER** | ✅ Assigned tickets only | ❌ | ❌ | ❌ | ✅ Password only |
+| **DEVELOPER** | ✅ Assigned tickets only | ❌ | ❌ | ❌ | ✅ Password only |
+| **SEO** | ✅ Assigned tickets only | ❌ | ❌ | ❌ | ✅ Password only |
 | **CUSTOMER** | ✅ Own dashboard | ❌ | ❌ | ❌ | ❌ |
 
 **Guards:**
@@ -517,8 +517,45 @@ Nginx (port 443)
 | Jun 18, 2026 | **New APIs** — `POST /staff/create`, `PUT /staff/:id/update`, `PUT /staff/:id/reset-password`, `GET /staff/by-role/:role` | `staffRoutes.ts` |
 | Jun 18, 2026 | **Role-filtered dropdowns** — INTAKE shows SEO only, SEO_STORE_SETUP shows DESIGNER only, DESIGN shows DEVELOPER only | `TicketDetailPanel.tsx`, `SeoStageSection.tsx`, `DesignSection.tsx` |
 | Jun 18, 2026 | **Customer Dashboard fix** — added missing `getDesignSubStatus` function, removed old stage references | `CustomerDashboard.tsx` |
+| Jun 20, 2026 | **🎨 Logo Type Management System** — CRUD admin interface for managing logo types with image upload, thumbnail preview in admin table | `AdminSettings.tsx`, `staffRoutes.ts`, `schema.prisma` |
+| Jun 20, 2026 | **🚫 AI Logo Generation Decommissioned** — removed AI logo generation button, logo display, and description sections from client intake flow | `AIProposalView.tsx` |
+| Jun 20, 2026 | **🎯 Logo Type Selection for Clients** — visual grid with dark-background cards, selection highlighting, and persistence to `save-ai-proposal` + `create-final` | `AIProposalView.tsx`, `index.ts` |
+| Jun 20, 2026 | **📋 Logo Type Display in Staff Views** — thumbnail + name shown in `TicketDetailPanel` and `DesignSection` for selected logo type | `TicketDetailPanel.tsx`, `DesignSection.tsx` |
+| Jun 20, 2026 | **🔒 Role-Based Visibility (Design)** — Designer sees upload/save/send only; SEO sees approve/revise buttons; others see read-only | `DesignSection.tsx` |
+| Jun 20, 2026 | **🔒 Role-Based Visibility (Dev)** — Developer sees checklist/submit; SEO sees approve/revise; AM/Admin see read-only overview | `DevSection.tsx` |
+| Jun 20, 2026 | **🔔 Global Toast Notification System** — reusable Toast component with success (green) / error (red), auto-dismiss 3s, slide animation | `Toast.tsx`, all action components |
+| Jun 20, 2026 | **👆 cursor-pointer + hover effects** — added to all buttons across all components | Multiple frontend files |
+| Jun 20, 2026 | **⏱️ Custom SLA on Stage Transfer** — optional SLA hours field when transferring tickets between stages | `TicketDetailPanel.tsx`, `SeoStageSection.tsx`, `DesignSection.tsx`, `DevSection.tsx` |
+| Jun 20, 2026 | **🔗 External URL Fix (ensureUrl)** — auto-prepends `https://` to URLs missing protocol (Figma links etc.) | `ensureUrl.ts`, `DesignSection.tsx`, `DevSection.tsx`, `SeoFinalSection.tsx`, `CustomerDashboard.tsx` |
+| Jun 20, 2026 | **🗑️ Removed AI Logo Section from Customer Dashboard** — deleted "الشعار المقترح بالذكاء الاصطناعي" section with logo image + "قيد المعالجة" button | `CustomerDashboard.tsx` |
+| Jun 20, 2026 | **🐛 White Screen Fix** — `logoTypeImageUrl` state was in wrong component scope (IntakeSection vs TicketDetailPanel), causing crash | `TicketDetailPanel.tsx` |
+| Jun 20, 2026 | **🧹 TypeScript Cleanup** — 51 build errors → 0: removed unused imports, variables, functions; fixed `normalizeUrl` null types | 7 frontend files |
+| Jun 21, 2026 | **✅ SEO Final Checklist Migration** — replaced 6 legacy fields (`pageTitlesSet`, `urlsOptimized`, `productsOptimized`, `contentReviewed`) with 4 new fields (`seoHomePage`, `seoCategoriesPage`, `metaDescSet`, `finalInspection`) | `schema.prisma`, `SeoFinalSection.tsx`, `index.ts` |
+| Jun 21, 2026 | **🛡️ Design Delivery Validation** — require at least Figma link OR design images before sending to SEO; disabled send button + warning message when empty | `index.ts`, `DesignSection.tsx` |
+| Jun 21, 2026 | **🎨 Client Design Selection** — when multiple designs uploaded, client must select ONE design to approve; selectable cards with green highlight + checkmark; `selectedImageUrl` field added to DesignDelivery | `schema.prisma`, `index.ts`, `CustomerDashboard.tsx` |
+| Jun 21, 2026 | **🆕 New Badge Restriction** — "جديد" badge now only shown when ticket is in INTAKE stage, not across all stages | `StaffDashboard.tsx` |
+| Jun 21, 2026 | **🌐 Domain-Only Proposals** — removed store name suggestions from SEO proposals; kept domain-only flow; updated staff + customer UI + backend endpoints | `SeoProposalsSection.tsx`, `CustomerDashboard.tsx`, `index.ts` |
+| Jun 22, 2026 | **📦 CollapsibleSection Component** — generic reusable accordion for all heavy sections (client info, brand identity, store details, legal docs, design, notes, checklist, audit log); collapsed by default | `TicketDetailPanel.tsx` |
+| Jun 22, 2026 | **🔓 Stage-Agnostic SEO Tasks** — `SeoStageSection` + `SeoFinalSection` now render for SEO role in ALL stages, not just their designated stage | `TicketDetailPanel.tsx` |
+| Jun 22, 2026 | **🔄 Same-Stage Reassignment** — removed restriction blocking transfers within current stage; allows re-assignment with new brief | `FlexibleTransferSection.tsx`, `index.ts` |
+| Jun 22, 2026 | **📋 Enriched Audit Trail** — flexible-transfer and ASSIGN_AM now log assigneeName, assigneeRole, fromStage, toStage; "Last Transfer" summary displayed in panel | `index.ts`, `TicketDetailPanel.tsx` |
+| Jun 22, 2026 | **✅ Approved Logo Highlight** — client-selected design shows green ring + "✅ معتمد" badge in image grid; approved logo thumbnail in CLIENT_APPROVED section | `DesignSection.tsx` |
+| Jun 22, 2026 | **🏪 Approved Logo in Store Details** — `approvedLogoUrl` fetched from design-delivery API; displayed in "بيانات المتجر" collapsible section | `TicketDetailPanel.tsx` |
+| Jun 22, 2026 | **🚫 Prevent Repeat Steps (Designer)** — when `isFinalized=true`, designer sees Figma only (no image upload); `hasContent` check accounts for finalized state | `DesignSection.tsx` |
+| Jun 22, 2026 | **🚫 Prevent Repeat Steps (Customer)** — on re-review, hides selection grid; shows "التصميم المعتمد سابقاً"; button changes to "اعتماد التحديثات"; auto-sends previous selectedImageUrl | `CustomerDashboard.tsx` |
+| Jun 22, 2026 | **🎉 Store Delivery Button** — green "تسليم المتجر للعميل" button in FlexibleTransferSection; shows delivery summary (domain, email, password, Figma, logo type); ADMIN+AM only | `FlexibleTransferSection.tsx`, `index.ts` |
+| Jun 22, 2026 | **🔐 Dev Credentials Control** — `showCredentialsToDev` field added to Ticket schema; toggle in transfer form when selecting DEVELOPMENT stage; DevSection shows credentials conditionally | `schema.prisma`, `FlexibleTransferSection.tsx`, `DevSection.tsx`, `index.ts` |
+| Jun 22, 2026 | **🔧 Final Delivery Endpoint Fix** — removed `seoFinalChecklist.isFinalized` requirement; replaced with simple `stage !== DELIVERED` check | `index.ts` |
+| Jun 23, 2026 | **📁 Dropshipping Approval Workflow** — full product file/link approval cycle: SEO uploads file → client approves/revises; statuses: SENT_FILE_TO_CLIENT, CLIENT_APPROVED_FILE, CLIENT_REVISION_FILE | `schema.prisma`, `index.ts`, `TicketDetailPanel.tsx`, `CustomerDashboard.tsx` |
+| Jun 23, 2026 | **👁️ Server-Side File Preview** — `/api/file-preview` endpoint converts Excel/CSV to styled HTML tables using `xlsx` library; inline Content-Disposition for all uploads | `index.ts`, `package.json` |
+| Jun 23, 2026 | **📥 Preview/Download Buttons** — staff and customer interfaces have separate Preview (Eye) and Download buttons; product links have "Open" button | `TicketDetailPanel.tsx`, `CustomerDashboard.tsx` |
+| Jun 24, 2026 | **🗑️ Product Link Delete** — added red X button to delete product link in staff panel | `TicketDetailPanel.tsx` |
+| Jun 24, 2026 | **👥 AM Staff Management** — ACCOUNT_MANAGER can now manage staff (create/edit/toggle/delete/reset-password) with restriction: cannot modify ADMIN accounts | `staffRoutes.ts`, `index.ts` |
+| Jun 24, 2026 | **🔒 Ticket Visibility by Assignment** — SEO sees only assigned tickets (seoSpecialistId/assignedSeoId), DESIGNER (designerId/assignedDesignerId), DEVELOPER (developerId); ADMIN+AM see all | `staffRoutes.ts` |
+| Jun 24, 2026 | **🐛 DevChecklist Schema Fix** — added missing `devBriefToSeo` field to DevChecklist model; fixed `update` → `upsert` in resubmit endpoint | `schema.prisma`, `index.ts` |
 
 ---
 
 > **Maintained by:** Development Team  
 > **Platform:** Fawri.net — Salla E-Commerce Onboarding System
+

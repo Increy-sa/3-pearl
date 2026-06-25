@@ -254,7 +254,7 @@ export function LegalInfoForm({ onNext, initialData }: Props) {
       <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row justify-between items-start gap-3 sm:gap-4">
         <div>
           <h2 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">البيانات القانونية</h2>
-          <p className="text-slate-500 mt-1 sm:mt-2 text-sm sm:text-base">نحتاج لبعض البيانات الأساسية لتوثيق حسابك في سلة.</p>
+          <p className="text-slate-500 mt-1 sm:mt-2 text-sm sm:text-base">نحتاج لبعض البيانات الأساسية لتوثيق حسابك.</p>
         </div>
         <button
           type="button"

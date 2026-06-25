@@ -3,7 +3,7 @@ import {
   X, Clock, AlertTriangle, Shield, Lock, User, Mail, Phone,
   CreditCard, Palette, Globe, ExternalLink, CheckSquare, Square,
   FileText, Eye, EyeOff, MessageSquare, Link2, Download,
-  AlertCircle, Send, CheckCircle2, Users, ArrowRight
+  AlertCircle, Send, CheckCircle2, Users, ArrowRight, Upload, Package
 } from 'lucide-react';
 
 import { API_URL } from '../../config/api';
@@ -15,6 +15,7 @@ import { DevSection } from './DevSection';
 import { SeoFinalSection } from './SeoFinalSection';
 import { useToast } from '../ui/Toast';
 import { ensureUrl } from '../../utils/ensureUrl';
+import { FlexibleTransferSection } from './FlexibleTransferSection';
 
 const API = API_URL;
 
@@ -111,6 +112,14 @@ function IntakeSection({ ticket, headers, staff, userRole: _userRole, onRefresh,
   const hasAtLeastOneDoc = !!(freelanceDocUrl || commercialRegUrl || ticket.freelanceDocUrl || ticket.commercialRegUrl);
   const staffList = staff.filter((s: any) => s.role === 'SEO' && s.isActive);
 
+  // Determine if client already uploaded their own documents
+  const c = ticket.client || {};
+  // Check ALL possible document sources: client-level fields + ticket-level fields
+  const clientHasOwnDocs = c.hasLegalDoc === true || c.hasDocument === true || !!(c.documentFileUrl || c.legalDocUrl);
+  const ticketHasDocs = !!(ticket.freelanceDocUrl || ticket.commercialRegUrl);
+  // If neither client nor ticket has any docs → staff must upload docs here (mandatory)
+  const needsStaffDocs = !clientHasOwnDocs && !ticketHasDocs && !hasAtLeastOneDoc;
+
   // Fetch data requests
   useEffect(() => {
     const fetchDataRequests = async () => {
@@ -204,8 +213,9 @@ function IntakeSection({ ticket, headers, staff, userRole: _userRole, onRefresh,
   const transferToNextStage = async () => {
     if (!selectedSeoId) return setErrorModal('يجب اختيار شخص SEO');
     if (!intakeBrief.trim()) return setErrorModal('يجب كتابة البريف');
-    if (!freelanceDocUrl && !commercialRegUrl && !ticket.freelanceDocUrl && !ticket.commercialRegUrl) {
-      return setErrorModal('يجب رفع وثيقة واحدة على الأقل');
+    // Only require staff docs if client didn't provide their own
+    if (needsStaffDocs && !freelanceDocUrl && !commercialRegUrl && !ticket.freelanceDocUrl && !ticket.commercialRegUrl) {
+      return setErrorModal('العميل لا يملك وثيقة — يجب رفع وثيقة العمل الحر أو السجل التجاري قبل التحويل');
     }
 
     setIsTransferring(true);
@@ -278,14 +288,14 @@ function IntakeSection({ ticket, headers, staff, userRole: _userRole, onRefresh,
                 <button
                   onClick={sendDataRequest}
                   disabled={isSendingRequest || !newMessage.trim()}
-                  className="px-4 py-2 bg-amber-600 text-white rounded-xl text-xs font-bold hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                  className="px-4 py-2 bg-amber-600 text-white rounded-xl text-xs font-bold hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
                 >
                   <Send className="w-3.5 h-3.5" />
                   {isSendingRequest ? 'جاري الإرسال...' : 'إرسال الطلب'}
                 </button>
                 <button
                   onClick={() => { setShowRequestForm(false); setNewMessage(''); }}
-                  className="px-3 py-2 text-slate-500 hover:text-slate-700 text-xs font-bold"
+                  className="px-3 py-2 text-slate-500 hover:text-slate-700 text-xs font-bold cursor-pointer"
                 >
                   إلغاء
                 </button>
@@ -295,7 +305,7 @@ function IntakeSection({ ticket, headers, staff, userRole: _userRole, onRefresh,
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowRequestForm(true)}
-                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
               >
                 <MessageSquare className="w-3.5 h-3.5" /> طلب بيانات إضافية
               </button>
@@ -303,7 +313,7 @@ function IntakeSection({ ticket, headers, staff, userRole: _userRole, onRefresh,
                 <button
                   onClick={approveIntake}
                   disabled={isApprovingIntake}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   {isApprovingIntake ? 'جاري الاعتماد...' : 'اعتماد بيانات العميل'}
@@ -314,12 +324,16 @@ function IntakeSection({ ticket, headers, staff, userRole: _userRole, onRefresh,
         </div>
       </section>
 
-      {/* ج- قسم الوثائق الرسمية */}
+      {/* ج- قسم الوثائق الرسمية — يظهر فقط إذا العميل لا يملك وثيقة */}
+      {needsStaffDocs && (
       <section className="space-y-3">
         <h3 className="text-xs font-bold text-sky-600 uppercase tracking-wider flex items-center gap-2">
           <FileText className="w-3.5 h-3.5" /> الوثائق الرسمية
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full animate-pulse">
+            <AlertTriangle className="w-3 h-3" /> إجباري — العميل لا يملك وثيقة
+          </span>
         </h3>
-        <div className="bg-sky-50/50 rounded-2xl border border-sky-200 p-4 space-y-4">
+        <div className="bg-red-50/30 rounded-2xl border-2 border-dashed border-red-300 p-4 space-y-4">
           {/* Freelance Doc */}
           <div className="space-y-2">
             <label className="text-xs font-bold text-slate-700 flex items-center gap-2">
@@ -336,7 +350,7 @@ function IntakeSection({ ticket, headers, staff, userRole: _userRole, onRefresh,
                 value={freelanceDocUrl}
                 onChange={e => setFreelanceDocUrl(e.target.value)}
                 placeholder="رابط الوثيقة أو ارفع ملف"
-                className="flex-1 text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-sky-300"
+                className="flex-1 text-xs border border-red-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-red-300"
               />
               <label className="cursor-pointer bg-slate-900 text-white px-3 py-2 rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors whitespace-nowrap">
                 {isUploadingFreelance ? 'جاري الرفع...' : 'رفع ملف'}
@@ -369,7 +383,7 @@ function IntakeSection({ ticket, headers, staff, userRole: _userRole, onRefresh,
                 value={commercialRegUrl}
                 onChange={e => setCommercialRegUrl(e.target.value)}
                 placeholder="رابط السجل أو ارفع ملف"
-                className="flex-1 text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-sky-300"
+                className="flex-1 text-xs border border-red-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-red-300"
               />
               <label className="cursor-pointer bg-slate-900 text-white px-3 py-2 rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors whitespace-nowrap">
                 {isUploadingCommercial ? 'جاري الرفع...' : 'رفع ملف'}
@@ -386,6 +400,13 @@ function IntakeSection({ ticket, headers, staff, userRole: _userRole, onRefresh,
             )}
           </div>
 
+          {!hasAtLeastOneDoc && (
+            <p className="text-[11px] text-red-600 font-bold flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              يجب رفع وثيقة العمل الحر أو السجل التجاري قبل تحويل الطلب
+            </p>
+          )}
+
           <div className="flex justify-end pt-2">
             <button onClick={saveDocuments} disabled={isSavingDocs}
               className="px-4 py-2 bg-sky-600 text-white rounded-xl text-xs font-bold hover:bg-sky-700 transition-colors disabled:opacity-50">
@@ -394,77 +415,77 @@ function IntakeSection({ ticket, headers, staff, userRole: _userRole, onRefresh,
           </div>
         </div>
       </section>
-
-      {/* د- قسم تحويل الطلب */}
-      {hasAtLeastOneDoc && (
-        <section className="space-y-3">
-          <h3 className="text-xs font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-2">
-            <ArrowRight className="w-3.5 h-3.5" /> تحويل الطلب للمرحلة التالية
-          </h3>
-          <div className="bg-emerald-50/50 rounded-2xl border border-emerald-200 p-4 space-y-4">
-            {/* SEO Person selector */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5" /> اختيار مختص SEO
-              </label>
-              <select
-                value={selectedSeoId}
-                onChange={e => setSelectedSeoId(e.target.value)}
-                className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300"
-              >
-                <option value="">اختر مختص SEO...</option>
-                {staffList.map((s: any) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} - {ROLE_LABELS[s.role] || s.role}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Brief textarea */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-700">البريف (ملخص الطلب)</label>
-              <textarea
-                value={intakeBrief}
-                onChange={e => setIntakeBrief(e.target.value)}
-                placeholder="اكتب ملخصاً شاملاً عن الطلب وما يجب الانتباه له..."
-                rows={4}
-                className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300 resize-none"
-              />
-            </div>
-
-            {/* Custom SLA */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5" /> SLA مخصص (بالساعات)
-              </label>
-              <input
-                type="number"
-                min={1}
-                value={customSlaHours}
-                onChange={e => setCustomSlaHours(e.target.value)}
-                placeholder="اتركه فارغاً لاستخدام الافتراضي (168 ساعة)"
-                className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300"
-                dir="ltr"
-              />
-            </div>
-
-            {/* Transfer button */}
-            <button
-              onClick={transferToNextStage}
-              disabled={isTransferring || !selectedSeoId || !intakeBrief.trim()}
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isTransferring ? (
-                <><Clock className="w-4 h-4 animate-spin" /> جاري التحويل...</>
-              ) : (
-                <><ArrowRight className="w-4 h-4" /> تحويل للمرحلة التالية (إعدادات SEO)</>
-              )}
-            </button>
-          </div>
-        </section>
       )}
     </>
+  );
+}
+
+// ── Generic Collapsible Section ──
+function CollapsibleSection({ title, subtitle, defaultOpen = false, children, color = 'slate' }: {
+  title: string; subtitle?: string; defaultOpen?: boolean; children: React.ReactNode; color?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const colorMap: Record<string, string> = {
+    slate: 'border-slate-200 bg-slate-50 hover:bg-slate-100',
+    blue: 'border-blue-200 bg-blue-50 hover:bg-blue-100',
+    teal: 'border-teal-200 bg-teal-50 hover:bg-teal-100',
+    violet: 'border-violet-200 bg-violet-50 hover:bg-violet-100',
+    indigo: 'border-indigo-200 bg-indigo-50 hover:bg-indigo-100',
+    emerald: 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100',
+    amber: 'border-amber-200 bg-amber-50 hover:bg-amber-100',
+  };
+  const cls = colorMap[color] || colorMap.slate;
+  return (
+    <section className="rounded-2xl border border-slate-200 overflow-hidden">
+      <button onClick={() => setIsOpen(!isOpen)}
+        className={`w-full flex items-center justify-between px-4 py-3 transition-colors cursor-pointer ${cls}`}>
+        <div className="flex items-center gap-2">
+          <span className="text-xs transition-transform duration-200" style={{ display: 'inline-block', transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+          <span className="text-xs font-bold text-slate-700">{title}</span>
+        </div>
+        {subtitle && <span className="text-[10px] font-bold text-slate-500 bg-white/60 px-2 py-0.5 rounded-full">{subtitle}</span>}
+      </button>
+      {isOpen && (
+        <div className="p-4 border-t border-slate-100 bg-white">
+          {children}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ── Collapsible wrapper for SEO sections (with progress fetch) ──
+function CollapsibleSeoSection({ title, defaultOpen, children, ticketId, headers, type }: {
+  title: string; defaultOpen: boolean; children: React.ReactNode;
+  ticketId: string; headers: Record<string, string>; type: 'setup' | 'final';
+}) {
+  const [progress, setProgress] = useState({ completed: 0, total: 0 });
+
+  useEffect(() => {
+    const url = type === 'setup'
+      ? `${API_URL}/api/tickets/${ticketId}/seo-checklist`
+      : `${API_URL}/api/tickets/${ticketId}/seo-final`;
+    fetch(url, { headers }).then(r => r.json()).then(d => {
+      if (!d || d.error) return;
+      if (type === 'setup') {
+        const keys = ['sallaAccountCreated', 'storeVerified', 'domainLinked', 'domainPurchased', 'productsUploaded'];
+        setProgress({ completed: keys.filter(k => !!d[k]).length, total: 5 });
+      } else {
+        const keys = ['paymentActivated','paymentTested','paymentGatewaysOk','shippingLinked','shippingZonesSet','shippingTested','seoHomePage','seoCategoriesPage','metaDescSet','finalInspection'];
+        setProgress({ completed: keys.filter(k => !!d[k]).length, total: keys.length });
+      }
+    }).catch(() => {});
+  }, [ticketId, type]);
+
+  return (
+    <CollapsibleSection
+      title={title}
+      subtitle={`${progress.completed}/${progress.total} مكتملة`}
+      defaultOpen={defaultOpen}
+      color="teal"
+    >
+      {children}
+    </CollapsibleSection>
   );
 }
 
@@ -489,6 +510,16 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
 
   // Logo type image
   const [logoTypeImageUrl, setLogoTypeImageUrl] = useState<string | null>(null);
+  // Approved design logo
+  const [approvedLogoUrl, setApprovedLogoUrl] = useState<string | null>(null);
+  // SEO Proposal (for approved domain display)
+  const [seoProposal, setSeoProposal] = useState<any>(null);
+  // Product Supplier Selection
+  const [supplierSelection, setSupplierSelection] = useState<any>(null);
+  const [supplierFileUrl, setSupplierFileUrl] = useState('');
+  const [supplierLink, setSupplierLink] = useState('');
+  const [uploadingSupplierFile, setUploadingSupplierFile] = useState(false);
+  const [savingSupplier, setSavingSupplier] = useState(false);
 
   useEffect(() => {
     try { setChecklist(JSON.parse(ticket.checklists || '[]')); } catch { setChecklist([]); }
@@ -503,6 +534,27 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
         if (match?.imageUrl) setLogoTypeImageUrl(match.imageUrl);
       }).catch(() => {});
     }
+    // Fetch approved design logo
+    fetch(`${API}/api/tickets/${ticket.id}/design-delivery`, { headers })
+      .then(r => r.json()).then(d => {
+        if (d?.selectedImageUrl) setApprovedLogoUrl(d.selectedImageUrl);
+      }).catch(() => {});
+    // Fetch SEO Proposal (Domain suggestions / selected domain)
+    fetch(`${API}/api/tickets/${ticket.id}/seo-proposals`, { headers })
+      .then(r => r.json()).then(d => {
+        if (d && d.id) setSeoProposal(d);
+        else setSeoProposal(null);
+      }).catch(() => setSeoProposal(null));
+    // Fetch product supplier selection
+    fetch(`${API}/api/tickets/${ticket.id}/product-supplier`, { headers })
+      .then(r => r.json()).then(d => {
+        if (d && d.id) {
+          setSupplierSelection(d);
+          if (d.productFileUrl) setSupplierFileUrl(d.productFileUrl);
+          if (d.productLink) setSupplierLink(d.productLink);
+        }
+        else setSupplierSelection(null);
+      }).catch(() => setSupplierSelection(null));
   }, [ticket]);
 
   const cfg = STAGE_CONFIG[ticket.stage] || STAGE_CONFIG.INTAKE;
@@ -562,12 +614,16 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
     }
   };
 
-  const isAssignedToMe =
-
-    ticket.accountManagerId === userId ||
-    ticket.designerId === userId ||
-    ticket.developerId === userId ||
-    ticket.seoSpecialistId === userId;
+  const isAssignedToMe = (() => {
+    switch (ticket.stage) {
+      case 'INTAKE': return ticket.accountManagerId === userId;
+      case 'SEO_STORE_SETUP': return ticket.seoSpecialistId === userId || ticket.assignedSeoId === userId;
+      case 'DESIGN': return ticket.designerId === userId;
+      case 'DEVELOPMENT': return ticket.developerId === userId;
+      case 'SEO_FINAL': return ticket.seoSpecialistId === userId || ticket.assignedSeoId === userId;
+      default: return false;
+    }
+  })();
 
   // Parse colors once
   let brandColors: string[] = [];
@@ -644,6 +700,95 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
             </button>
           )}
 
+          {/* Last Transfer Info */}
+          {(() => {
+            const transferActions = ['FLEXIBLE_TRANSFER', 'ASSIGNED_AM', 'STAGE_CHANGED', 'MOVED_TO_DEVELOPMENT', 'EMERGENCY_TRANSFER'];
+            const transferLog = ticket.auditLogs?.find((log: any) =>
+              transferActions.includes(log.action)
+            );
+            if (!transferLog) return null;
+            let details: any = {};
+            try { details = JSON.parse(transferLog.details || '{}'); } catch {}
+
+            const ROLE_MAP: Record<string, string> = { ADMIN: 'مدير النظام', ACCOUNT_MANAGER: 'مدير حساب', DESIGNER: 'مصمم', DEVELOPER: 'مطوّر', SEO: 'مختص SEO' };
+            const STAGE_MAP: Record<string, string> = {
+              INTAKE: 'استلام الطلب', SEO_STORE_SETUP: 'إعدادات SEO', DESIGN: 'التصميم',
+              DEVELOPMENT: 'البرمجة', SEO_FINAL: 'المراجعة النهائية', DELIVERED: 'تم التسليم',
+              ACCOUNT_MANAGER: 'مدير الحساب',
+            };
+
+            const senderName = transferLog.user?.name || 'غير معروف';
+            const senderRole = ROLE_MAP[transferLog.user?.role] || transferLog.user?.role || '';
+            
+            // Extract receiver info based on action type
+            let receiverName = details.assigneeName || '';
+            let receiverRole = ROLE_MAP[details.assigneeRole] || details.assigneeRole || '';
+            
+            // For STAGE_CHANGED / MOVED_TO_DEVELOPMENT, try to get developer name from staff
+            if (!receiverName && details.developerId) {
+              const dev = staff.find(s => s.id === details.developerId);
+              if (dev) { receiverName = dev.name; receiverRole = ROLE_MAP[dev.role] || dev.role; }
+            }
+
+            // Extract stage info
+            const fromStage = STAGE_MAP[details.from] || details.from || '';
+            const toStage = STAGE_MAP[details.to] || STAGE_MAP[details.stage] || details.to || details.stage || '';
+
+            // Smart achievement summary from audit logs
+            const achievements: string[] = [];
+            const logs = ticket.auditLogs || [];
+            if (logs.some((l: any) => {
+              try { const d = JSON.parse(l.details || '{}'); return d.designStatus === 'CLIENT_APPROVED'; } catch { return false; }
+            }) || ticket.stage === 'DEVELOPMENT' || ticket.stage === 'SEO_FINAL') {
+              achievements.push('✅ التصميم معتمد');
+            }
+            if (ticket.aiProposal?.selectedDomain) {
+              achievements.push(`✅ الدومين المعتمد: ${ticket.aiProposal.selectedDomain}`);
+            }
+            if (ticket.stage === 'SEO_FINAL') {
+              achievements.push('✅ مهام التطوير مكتملة');
+            }
+
+            return (
+              <section className="bg-blue-50 rounded-2xl border border-blue-200 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-blue-700 flex items-center gap-1.5">📋 آخر تحويل</h4>
+                  <span className="text-[10px] text-blue-500">{fmtDate(transferLog.createdAt)}</span>
+                </div>
+
+                {/* From → To (people) — ← is correct in RTL: points from right-item to left-item */}
+                <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                  <span className="text-blue-600">من: <strong>{senderName}</strong> ({senderRole})</span>
+                  {receiverName && (
+                    <>
+                      <span className="text-blue-400">←</span>
+                      <span className="text-blue-600">إلى: <strong>{receiverName}</strong> ({receiverRole})</span>
+                    </>
+                  )}
+                </div>
+
+
+
+                {/* Brief */}
+                {details.brief && (
+                  <div className="bg-white rounded-xl p-3 border border-blue-100">
+                    <p className="text-[10px] text-blue-500 font-bold mb-1">الملاحظات:</p>
+                    <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">{details.brief}</p>
+                  </div>
+                )}
+
+                {/* Achievement summary */}
+                {achievements.length > 0 && (
+                  <div className="bg-emerald-50 rounded-xl p-2.5 border border-emerald-100 space-y-1">
+                    {achievements.map((a, i) => (
+                      <p key={i} className="text-[11px] font-bold text-emerald-700">{a}</p>
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })()}
+
           {(() => {
             const allInstructions: Array<{ role: string; text?: string | null }> = [
               { role: 'ACCOUNT_MANAGER', text: ticket.amInstructions },
@@ -698,11 +843,9 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
 
 
 
-          {/* Display Design Files for others (AM, ADMIN, SEO, etc) if they exist */}
+          {/* Display Design Files */}
           {(ticket.designLogoUrl || ticket.designBannersUrl || ticket.designCategoriesUrl) && (
-
-            <section className="space-y-3">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">التصاميم المعتمدة</h3>
+            <CollapsibleSection title="🎨 التصاميم المعتمدة" color="violet">
               <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {normalizeUrl(ticket.designLogoUrl) && (
                   <div className="space-y-1.5">
@@ -714,7 +857,6 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
                     </a>
                   </div>
                 )}
-                
                 {(() => {
                   let banners: string[] = [];
                   try { banners = JSON.parse(ticket.designBannersUrl || '[]'); } catch { banners = ticket.designBannersUrl ? [ticket.designBannersUrl] : []; }
@@ -732,7 +874,6 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
                   ) : null;
                   });
                 })()}
-
                 {normalizeUrl(ticket.designCategoriesUrl) && (
                   <div className="space-y-1.5">
                     <span className="text-[10px] text-slate-400">صور الأقسام</span>
@@ -744,13 +885,12 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
                   </div>
                 )}
               </div>
-            </section>
+            </CollapsibleSection>
           )}
 
           {/* Store Details */}
           {ticket.storeDetails && (
-            <section className="space-y-3">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">بيانات المتجر</h3>
+            <CollapsibleSection title="🏪 بيانات المتجر" color="blue">
               <div className="bg-slate-50 rounded-2xl border border-slate-100 divide-y divide-slate-100">
                 <div className="flex items-center gap-3 px-4 py-3">
                   <Globe className="w-4 h-4 text-slate-400 shrink-0" />
@@ -783,13 +923,24 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
                   )}
                 </div>
               </div>
-            </section>
+              {/* Approved Design Logo */}
+              {approvedLogoUrl && (
+                <div className="mt-3 bg-emerald-50 rounded-2xl border border-emerald-200 p-4">
+                  <p className="text-[10px] text-emerald-600 font-bold mb-2">🎨 التصميم المعتمد من العميل</p>
+                  <div className="flex items-center gap-3">
+                    <img src={normalizeUrl(approvedLogoUrl) || ''} alt="التصميم المعتمد" className="w-20 h-20 object-contain rounded-xl border-2 border-emerald-300 bg-white p-1.5" />
+                    <a href={normalizeUrl(approvedLogoUrl) || ''} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                      <ExternalLink className="w-3 h-3" /> عرض بالحجم الكامل
+                    </a>
+                  </div>
+                </div>
+              )}
+            </CollapsibleSection>
           )}
 
 
-          {/* ── Client Info + Legal Documents ─────────────────────── */}
-          <section className="space-y-3">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">بيانات العميل</h3>
+          {/* ── Client Info ─────────────────────── */}
+          <CollapsibleSection title="👤 بيانات العميل" color="slate">
             <div className="bg-slate-50 rounded-2xl border border-slate-100 divide-y divide-slate-100">
               {[
                 { icon: User,       label: 'الاسم',    value: ticket.client?.customerName },
@@ -806,7 +957,7 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
                 </div>
               ))}
             </div>
-          </section>
+          </CollapsibleSection>
 
           {/* ── Legal Documents Section (ADMIN + AM only) ────────── */}
           {['ADMIN', 'ACCOUNT_MANAGER'].includes(userRole) && (() => {
@@ -897,15 +1048,27 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
             );
           })()}
 
-          {/* Brand Identity — Task 3: Full display */}
+          {/* Brand Identity */}
           {ticket.aiProposal && (
-            <section className="space-y-3">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">الهوية التجارية</h3>
+            <CollapsibleSection title="🎯 الهوية التجارية" color="indigo">
               <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div><span className="text-[10px] text-slate-400 block">الاسم المختار</span><span className="text-sm font-black text-slate-800">{ticket.aiProposal.selectedName || '—'}</span></div>
                   <div><span className="text-[10px] text-slate-400 block">اسم النشاط</span><span className="text-sm font-bold text-slate-700">{ticket.aiProposal.businessName || '—'}</span></div>
                 </div>
+                {(seoProposal?.selectedDomain || ticket.aiProposal?.selectedDomain) && (
+                  <div>
+                    <span className="text-[10px] text-slate-400 block mb-1">الدومين المعتمد</span>
+                    <a
+                      href={`https://${seoProposal?.selectedDomain || ticket.aiProposal?.selectedDomain}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:underline ltr"
+                    >
+                      <Globe className="w-3.5 h-3.5" /> {seoProposal?.selectedDomain || ticket.aiProposal?.selectedDomain}
+                    </a>
+                  </div>
+                )}
                 {ticket.aiProposal.brandVision && (
                   <div><span className="text-[10px] text-slate-400 block mb-1">الرؤية</span><p className="text-xs text-slate-700 leading-relaxed">{ticket.aiProposal.brandVision}</p></div>
                 )}
@@ -971,8 +1134,219 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
                   </div>
                 )}
               </div>
-            </section>
+            </CollapsibleSection>
           )}
+
+          {/* 🏪 Product Supplier Section — SEO/AM/ADMIN */}
+          {['ADMIN', 'ACCOUNT_MANAGER', 'SEO'].includes(userRole) && supplierSelection && (() => {
+            const ss = supplierSelection;
+            const handleUploadFile = async (file: File) => {
+              setUploadingSupplierFile(true);
+              try {
+                const reader = new FileReader();
+                const base64 = await new Promise<string>(resolve => { reader.onloadend = () => resolve(reader.result as string); reader.readAsDataURL(file); });
+                const res = await fetch(`${API}/api/tickets/${ticket.id}/product-file`, {
+                  method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ fileName: file.name, fileData: base64 })
+                });
+                if (res.ok) { const r = await res.json(); setSupplierFileUrl(r.url); showToast('تم رفع الملف ✅'); }
+                else showToast('فشل رفع الملف', 'error');
+              } catch { showToast('فشل رفع الملف', 'error'); }
+              finally { setUploadingSupplierFile(false); }
+            };
+            const handleSaveUpload = async () => {
+              const fUrl = supplierFileUrl || ss.productFileUrl;
+              const pLink = supplierLink || ss.productLink;
+              if (!fUrl && !pLink) { showToast('مطلوب ملف أو رابط (واحد على الأقل)', 'error'); return; }
+              setSavingSupplier(true);
+              try {
+                const res = await fetch(`${API}/api/tickets/${ticket.id}/product-supplier/upload`, {
+                  method: 'PUT', headers,
+                  body: JSON.stringify({ productFileUrl: fUrl || null, productLink: pLink || null })
+                });
+                if (res.ok) { const d = await res.json(); setSupplierSelection(d); showToast('تم حفظ بيانات المنتجات ✅'); }
+                else { const e = await res.json(); showToast(e.error || 'فشل الحفظ', 'error'); }
+              } catch { showToast('تعذر الاتصال', 'error'); }
+              finally { setSavingSupplier(false); }
+            };
+            const handleFinalize = async () => {
+              setSavingSupplier(true);
+              try {
+                const res = await fetch(`${API}/api/tickets/${ticket.id}/product-supplier/finalize`, { method: 'PUT', headers });
+                if (res.ok) { const d = await res.json(); setSupplierSelection(d); showToast('تم الاعتماد النهائي ✅'); }
+                else showToast('فشل الاعتماد', 'error');
+              } catch { showToast('تعذر الاتصال', 'error'); }
+              finally { setSavingSupplier(false); }
+            };
+
+            // Determine whether upload section should show
+            const showUpload = ['CLIENT_SELECTED', 'FILE_UPLOADED', 'CLIENT_REVISION_FILE'].includes(ss.status);
+
+            return (
+              <CollapsibleSection title="🏪 مزود المنتجات" color="amber">
+                <div className="space-y-3">
+                  {/* Status Badge */}
+                  {ss.status === 'PENDING' && (
+                    <div className="bg-slate-50 rounded-xl border border-slate-200 p-3 flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-slate-400" />
+                      <p className="text-xs text-slate-500">لم يتم إرسال خيارات المزودين للعميل بعد</p>
+                    </div>
+                  )}
+                  {ss.status === 'SENT_TO_CLIENT' && (
+                    <div className="bg-blue-50 rounded-xl border border-blue-200 p-3 flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-blue-500" />
+                      <p className="text-xs font-bold text-blue-700">بانتظار اختيار العميل للمزود</p>
+                    </div>
+                  )}
+                  {ss.status === 'SENT_FILE_TO_CLIENT' && (
+                    <div className="bg-indigo-50 rounded-xl border border-indigo-200 p-3 flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-indigo-500" />
+                      <p className="text-xs font-bold text-indigo-700">📦 بانتظار مراجعة العميل لملف المنتجات</p>
+                    </div>
+                  )}
+                  {ss.status === 'CLIENT_REVISION_FILE' && (
+                    <div className="bg-orange-50 rounded-xl border border-orange-200 p-3 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-orange-500" />
+                      <p className="text-xs font-bold text-orange-700">🔄 العميل طلب تعديل على ملف المنتجات</p>
+                    </div>
+                  )}
+                  {ss.status === 'CLIENT_APPROVED_FILE' && (
+                    <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-3 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <p className="text-xs font-bold text-emerald-700">✅ العميل اعتمد ملف المنتجات</p>
+                    </div>
+                  )}
+                  {ss.status === 'FINALIZED' && (
+                    <div className="bg-emerald-50 rounded-xl border border-emerald-300 p-3 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <p className="text-xs font-bold text-emerald-700">🎉 تم الاعتماد النهائي</p>
+                    </div>
+                  )}
+
+                  {/* Supplier info */}
+                  {ss.selectedSupplierName && (
+                    <div className="bg-green-50 rounded-xl border border-green-200 p-3">
+                      <p className="text-[10px] text-green-600 font-bold mb-0.5">المزود المختار:</p>
+                      <p className="text-xs font-bold text-green-800">{ss.selectedSupplierName}</p>
+                    </div>
+                  )}
+
+                  {/* Client notes */}
+                  {ss.clientNotes && (
+                    <div className="bg-slate-50 rounded-xl border border-slate-100 p-3">
+                      <p className="text-[10px] text-slate-400 font-bold mb-1">ملاحظات العميل:</p>
+                      <p className="text-xs text-slate-700 whitespace-pre-wrap">{ss.clientNotes}</p>
+                    </div>
+                  )}
+
+                  {/* Current file/link display (all upload-related statuses) */}
+                  {(ss.productFileUrl || ss.productLink) && (() => {
+                    const getPreviewUrl = (url: string) => {
+                      const ext = url.split('.').pop()?.toLowerCase() || '';
+                      const viewableInBrowser = ['pdf','png','jpg','jpeg','gif','webp','svg','txt'].includes(ext);
+                      return viewableInBrowser ? url : `${API}/api/file-preview?url=${encodeURIComponent(url)}`;
+                    };
+                    return (
+                    <div className="space-y-2">
+                      {ss.productFileUrl && (
+                        <div className="flex items-center gap-2 p-2.5 bg-white rounded-lg border border-amber-200 text-xs">
+                          <Download className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          <span className="flex-1 truncate text-amber-800 font-bold">الملف المرفوع</span>
+                          <a href={getPreviewUrl(ss.productFileUrl)} target="_blank" rel="noreferrer"
+                            className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-bold cursor-pointer flex items-center gap-1">
+                            <ExternalLink className="w-3 h-3" /> معاينة
+                          </a>
+                          <a href={ss.productFileUrl} download target="_blank" rel="noreferrer"
+                            className="px-2 py-1 bg-slate-50 text-slate-600 rounded-lg hover:bg-slate-100 transition-colors font-bold cursor-pointer flex items-center gap-1">
+                            <Download className="w-3 h-3" /> تحميل
+                          </a>
+                          <button onClick={() => { setSupplierFileUrl(''); setSupplierSelection({ ...ss, productFileUrl: null }); }}
+                            className="p-1 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors cursor-pointer" title="حذف الملف">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                      {ss.productLink && (
+                        <div className="flex items-center gap-2 p-2.5 bg-white rounded-lg border border-teal-200 text-xs">
+                          <ExternalLink className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                          <span className="flex-1 truncate text-teal-800 font-bold">رابط المنتجات</span>
+                          <a href={ss.productLink} target="_blank" rel="noreferrer"
+                            className="px-2 py-1 bg-teal-50 text-teal-600 rounded-lg hover:bg-teal-100 transition-colors font-bold cursor-pointer flex items-center gap-1">
+                            <ExternalLink className="w-3 h-3" /> فتح
+                          </a>
+                          <button onClick={() => { setSupplierLink(''); setSupplierSelection({ ...ss, productLink: null }); }}
+                            className="p-1 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors cursor-pointer" title="حذف الرابط">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    );
+                  })()}
+
+                  {/* File Upload Section — show for CLIENT_SELECTED, FILE_UPLOADED, CLIENT_REVISION_FILE */}
+                  {showUpload && (() => {
+                    const getPreviewUrl = (url: string) => {
+                      const ext = url.split('.').pop()?.toLowerCase() || '';
+                      const viewableInBrowser = ['pdf','png','jpg','jpeg','gif','webp','svg','txt'].includes(ext);
+                      return viewableInBrowser ? url : `${API}/api/file-preview?url=${encodeURIComponent(url)}`;
+                    };
+                    return (
+                    <div className="bg-amber-50 rounded-xl border border-amber-200 p-4 space-y-3">
+                      <h4 className="text-xs font-bold text-amber-700 flex items-center gap-1.5">
+                        <Package className="w-3.5 h-3.5" /> رفع / تعديل ملف المنتجات
+                      </h4>
+
+                      {supplierFileUrl && supplierFileUrl !== ss.productFileUrl && (
+                        <div className="flex items-center gap-2 p-2.5 bg-white rounded-lg border border-emerald-200 text-xs">
+                          <Download className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span className="flex-1 truncate text-emerald-800 font-bold">ملف جديد مرفوع ✅</span>
+                          <a href={getPreviewUrl(supplierFileUrl)} target="_blank" rel="noreferrer"
+                            className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-bold cursor-pointer flex items-center gap-1">
+                            <ExternalLink className="w-3 h-3" /> معاينة
+                          </a>
+                          <button onClick={() => setSupplierFileUrl(ss.productFileUrl || '')}
+                            className="p-1 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors cursor-pointer" title="إلغاء">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+
+                      <label className={`flex items-center gap-2 px-3 py-2.5 border border-dashed border-amber-300 rounded-xl text-xs font-bold text-amber-600 hover:border-amber-500 hover:bg-amber-50 transition-colors cursor-pointer ${uploadingSupplierFile ? 'opacity-50' : ''}`}>
+                        <input type="file" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadFile(f); e.target.value = ''; }} />
+                        {uploadingSupplierFile ? <Clock className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                        {uploadingSupplierFile ? 'جاري الرفع...' : 'رفع ملف (Excel, PDF, CSV, ZIP...)'}
+                      </label>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-amber-600">رابط المنتجات (اختياري)</label>
+                        <input type="url" dir="ltr"
+                          value={supplierLink || ss.productLink || ''} onChange={e => setSupplierLink(e.target.value)}
+                          placeholder="https://..."
+                          className="w-full text-xs border border-amber-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-amber-300" />
+                      </div>
+
+                      <button onClick={handleSaveUpload} disabled={savingSupplier}
+                        className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 cursor-pointer">
+                        {savingSupplier ? <Clock className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                        {savingSupplier ? 'جاري الحفظ...' : 'حفظ'}
+                      </button>
+                    </div>
+                    );
+                  })()}
+
+                  {/* Finalize button — show when CLIENT_APPROVED_FILE */}
+                  {ss.status === 'CLIENT_APPROVED_FILE' && (
+                    <button onClick={handleFinalize} disabled={savingSupplier}
+                      className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 cursor-pointer">
+                      {savingSupplier ? <Clock className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                      اعتماد نهائي
+                    </button>
+                  )}
+                </div>
+              </CollapsibleSection>
+            );
+          })()}
 
           {/* Legal Doc Link — Task 3 */}
           {normalizeUrl(ticket.client?.legalDocUrl) && (
@@ -989,27 +1363,23 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
             </section>
           )}
 
-          {/* Internal Notes — Task 6: renamed */}
-          <section className="space-y-3">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-              <MessageSquare className="w-3.5 h-3.5" /> ملاحظات الفريق الداخلية
-            </h3>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="أضف ملاحظاتك هنا..."
-              className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none" />
-            <div className="flex items-center gap-2">
-              <Link2 className="w-3.5 h-3.5 text-slate-400" />
-              <input value={assets} onChange={e => setAssets(e.target.value)} placeholder="رابط الملفات / التسليمات"
-                className="flex-1 text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+          {/* Internal Notes */}
+          <CollapsibleSection title="💬 ملاحظات الفريق الداخلية" color="indigo">
+            <div className="space-y-3">
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="أضف ملاحظاتك هنا..."
+                className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none" />
+              <div className="flex items-center gap-2">
+                <Link2 className="w-3.5 h-3.5 text-slate-400" />
+                <input value={assets} onChange={e => setAssets(e.target.value)} placeholder="رابط الملفات / التسليمات"
+                  className="flex-1 text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+              </div>
+              <button onClick={saveNotes} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors cursor-pointer">حفظ الملاحظات</button>
             </div>
-            <button onClick={saveNotes} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors cursor-pointer">حفظ الملاحظات</button>
-          </section>
+          </CollapsibleSection>
 
           {/* Checklist */}
           {checklist.length > 0 && (
-            <section className="space-y-3">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                قائمة المهام ({checklist.filter((c: any) => c.completed).length}/{checklist.length})
-              </h3>
+            <CollapsibleSection title={`✅ قائمة المهام`} subtitle={`${checklist.filter((c: any) => c.completed).length}/${checklist.length}`} color="emerald">
               <div className="space-y-2">
                 {checklist.map((item: any, idx: number) => (
                   <button key={idx} onClick={() => toggleCheck(idx)}
@@ -1019,13 +1389,26 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
                   </button>
                 ))}
               </div>
-            </section>
+            </CollapsibleSection>
           )}
 
 
-          {ticket.stage === 'SEO_STORE_SETUP' && (
-            <SeoStageSection ticket={ticket} headers={headers} staff={staff} userRole={userRole} onRefresh={onRefresh} setErrorModal={setErrorModal} />
-          )}
+          {/* ══════ SEO_STORE_SETUP Stage ══════ */}
+          {(ticket.stage === 'SEO_STORE_SETUP' || (userRole === 'SEO' && ticket.stage !== 'SEO_STORE_SETUP' && ticket.stage !== 'DELIVERED')) && (() => {
+            const isNativeStage = ticket.stage === 'SEO_STORE_SETUP';
+            if (!isNativeStage && !['SEO', 'ADMIN'].includes(userRole)) return null;
+            return (
+              <CollapsibleSeoSection
+                title="📋 مهام إعداد المتجر"
+                defaultOpen={isNativeStage}
+                ticketId={ticket.id}
+                headers={headers}
+                type="setup"
+              >
+                <SeoStageSection ticket={ticket} headers={headers} staff={staff} userRole={userRole} onRefresh={onRefresh} setErrorModal={setErrorModal} />
+              </CollapsibleSeoSection>
+            );
+          })()}
 
           {/* ── DESIGN Stage — Designer Upload / SEO & Client Review ──── */}
           {ticket.stage === 'DESIGN' && (
@@ -1037,78 +1420,30 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
             <DevSection ticket={ticket} headers={headers} userRole={userRole} onRefresh={onRefresh} setErrorModal={setErrorModal} />
           )}
 
-          {/* ── SEO_FINAL Stage — Final Checklist / Delivery ────────── */}
-          {ticket.stage === 'SEO_FINAL' && (
-            <SeoFinalSection ticket={ticket} headers={headers} userRole={userRole} onRefresh={onRefresh} setErrorModal={setErrorModal} />
+          {/* ══════ SEO_FINAL Stage ══════ */}
+          {(ticket.stage === 'SEO_FINAL' || (userRole === 'SEO' && ticket.stage !== 'SEO_FINAL' && ticket.stage !== 'DELIVERED')) && (() => {
+            const isNativeStage = ticket.stage === 'SEO_FINAL';
+            if (!isNativeStage && !['SEO', 'ADMIN'].includes(userRole)) return null;
+            return (
+              <CollapsibleSeoSection
+                title="📋 مهام المراجعة النهائية"
+                defaultOpen={isNativeStage}
+                ticketId={ticket.id}
+                headers={headers}
+                type="final"
+              >
+                <SeoFinalSection ticket={ticket} headers={headers} userRole={userRole} onRefresh={onRefresh} setErrorModal={setErrorModal} />
+              </CollapsibleSeoSection>
+            );
+          })()}
+
+          {/* ── Flexible Transfer — AM / SEO / ADMIN (all stages except DELIVERED) ── */}
+          {ticket.stage !== 'DELIVERED' && ['ADMIN', 'ACCOUNT_MANAGER', 'SEO'].includes(userRole) && (
+            <FlexibleTransferSection ticket={ticket} headers={headers} staff={staff} userRole={userRole} onRefresh={onRefresh} setErrorModal={setErrorModal} />
           )}
 
-          {/* ── Emergency Transfer — ADMIN Only ────────────────── */}
-          {userRole === 'ADMIN' && (
-            <section className="space-y-3">
-              <h3 className="text-xs font-bold text-red-500 uppercase tracking-wider flex items-center gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5" /> تحويل طوارئ (مدير النظام)
-              </h3>
-              <div className="bg-slate-50 rounded-2xl border border-red-200/60 p-4 space-y-3">
-                <select
-                  value={emergencyStage}
-                  onChange={e => setEmergencyStage(e.target.value)}
-                  className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-red-300"
-                >
-                  <option value="">اختر المرحلة...</option>
-                  {STAGES_ORDER.filter(s => s !== ticket.stage).map(s => (
-                    <option key={s} value={s}>{STAGE_CONFIG[s].label}</option>
-                  ))}
-                </select>
-                <textarea
-                  value={emergencyReason}
-                  onChange={e => setEmergencyReason(e.target.value)}
-                  placeholder="سبب التحويل الطارئ (مطلوب)..."
-                  rows={2}
-                  className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-red-300 resize-none"
-                />
-                {emergencyError && (
-                  <div className="flex items-center gap-2 p-2 bg-red-50 rounded-lg border border-red-100">
-                    <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                    <p className="text-[11px] text-red-700">{emergencyError}</p>
-                  </div>
-                )}
-                <button
-                  onClick={async () => {
-                    if (!emergencyStage || !emergencyReason.trim()) return;
-                    setIsEmergencyTransferring(true);
-                    setEmergencyError(null);
-                    try {
-                      const res = await fetch(`${API}/api/tickets/${ticket.id}/emergency-transfer`, {
-                        method: 'PUT', headers,
-                        body: JSON.stringify({ stage: emergencyStage, reason: emergencyReason.trim() }),
-                      });
-                      if (res.ok) {
-                        setEmergencyStage('');
-                        setEmergencyReason('');
-                        onRefresh();
-                      } else {
-                        const err = await res.json();
-                        setEmergencyError(err.error || 'فشل التحويل');
-                      }
-                    } catch {
-                      setEmergencyError('تعذر الاتصال بالخادم');
-                    } finally {
-                      setIsEmergencyTransferring(false);
-                    }
-                  }}
-                  disabled={isEmergencyTransferring || !emergencyStage || !emergencyReason.trim()}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                >
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                  {isEmergencyTransferring ? 'جاري التحويل...' : 'تحويل طوارئ'}
-                </button>
-              </div>
-            </section>
-          )}
-
-          {/* Audit Log — Task 6: scrollable with clear times */}
-          <section className="space-y-3">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">سجل العمليات</h3>
+          {/* Audit Log */}
+          <CollapsibleSection title="📜 سجل العمليات" subtitle={`${ticket.auditLogs?.length || 0} عملية`} color="slate">
             <div className="max-h-64 overflow-y-auto space-y-2 border border-slate-100 rounded-2xl p-3 bg-slate-50">
               {ticket.auditLogs?.length > 0 ? ticket.auditLogs.map((log: any) => (
                 <div key={log.id} className="flex items-start gap-3 px-3 py-2.5 bg-white rounded-xl border border-slate-100">
@@ -1133,7 +1468,7 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
                 <p className="text-center text-[11px] text-slate-400 py-4">لا توجد عمليات مسجلة بعد</p>
               )}
             </div>
-          </section>
+          </CollapsibleSection>
         </div>
         </div>
       </div>

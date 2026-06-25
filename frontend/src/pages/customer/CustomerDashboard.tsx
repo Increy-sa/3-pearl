@@ -4,7 +4,7 @@ import {
   Loader2, CheckCircle2, Clock, Palette, Type, Globe,
   LayoutDashboard, User as UserIcon, MessageSquare, LogOut, 
   Image as ImageIcon, FileText, ExternalLink, Activity, ShieldCheck,
-  IdCard, Smartphone, ThumbsUp, PenLine, AlertCircle, CheckCircle, Send
+  IdCard, Smartphone, ThumbsUp, PenLine, AlertCircle, CheckCircle, Send, Download, Eye
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from '../../config/api';
@@ -206,7 +206,7 @@ function IntakeCustomerSection({ ticketId, token }: { ticketId: string; token: s
 function SeoCustomerSection({ ticket, token }: { ticket: any; token: string }) {
   const [proposal, setProposal] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedName, setSelectedName] = useState('');
+
   const [selectedDomain, setSelectedDomain] = useState('');
   const [notes, setNotes] = useState('');
   const [sending, setSending] = useState(false);
@@ -222,14 +222,14 @@ function SeoCustomerSection({ ticket, token }: { ticket: any; token: string }) {
   }, [ticket.id, token]);
 
   const submitReview = async (action: 'APPROVE' | 'REVISION') => {
-    if (action === 'APPROVE' && (!selectedName || !selectedDomain)) {
-      setError('يرجى اختيار اسم ودومين'); return;
+    if (action === 'APPROVE' && !selectedDomain) {
+      setError('يرجى اختيار دومين'); return;
     }
     setSending(true); setError(null);
     try {
       const res = await fetch(`${API_URL}/api/tickets/${ticket.id}/seo-proposals/client-review`, {
         method: 'PUT', headers: hdrs,
-        body: JSON.stringify({ action, selectedName, selectedDomain, notes })
+        body: JSON.stringify({ action, selectedDomain, notes })
       });
       if (res.ok) { setProposal(await res.json()); showToast(action === 'APPROVE' ? 'تم اعتماد الاختيارات بنجاح ✅' : 'تم إرسال طلب التعديل'); }
       else { const e = await res.json(); setError(e.error); }
@@ -248,19 +248,13 @@ function SeoCustomerSection({ ticket, token }: { ticket: any; token: string }) {
           <div className="w-10 h-10 bg-teal-100 rounded-xl flex items-center justify-center shrink-0"><span className="text-xl">🏪</span></div>
           <div>
             <p className="text-sm font-bold text-teal-800">جارٍ إعداد متجرك</p>
-            <p className="text-xs text-teal-700 mt-1">فريق SEO يعمل على تجهيز متجرك على منصة سلة.</p>
+            <p className="text-xs text-teal-700 mt-1">فريق SEO يعمل على تجهيز متجرك.</p>
           </div>
         </div>
-        {proposal?.selectedName && (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-white rounded-xl p-3 border border-teal-100">
-              <p className="text-[10px] text-teal-600 font-bold mb-1">اسم المتجر</p>
-              <p className="text-sm font-bold text-slate-900">{proposal.selectedName}</p>
-            </div>
-            <div className="bg-white rounded-xl p-3 border border-teal-100">
-              <p className="text-[10px] text-teal-600 font-bold mb-1">الدومين</p>
-              <p className="text-sm font-bold text-slate-900 ltr text-left">{proposal.selectedDomain}</p>
-            </div>
+        {proposal?.selectedDomain && (
+          <div className="bg-white rounded-xl p-3 border border-teal-100">
+            <p className="text-[10px] text-teal-600 font-bold mb-1">الدومين</p>
+            <p className="text-sm font-bold text-slate-900 ltr text-left">{proposal.selectedDomain}</p>
           </div>
         )}
       </div>
@@ -274,8 +268,8 @@ function SeoCustomerSection({ ticket, token }: { ticket: any; token: string }) {
         <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 sm:p-6 flex items-start gap-3">
           <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-bold text-emerald-800">تم اعتماد اختياراتك ✅</p>
-            <p className="text-xs text-emerald-700 mt-1">الاسم: {proposal.selectedName} | الدومين: {proposal.selectedDomain}</p>
+            <p className="text-sm font-bold text-emerald-800">تم اعتماد اختيارك ✅</p>
+            <p className="text-xs text-emerald-700 mt-1">الدومين: {proposal.selectedDomain}</p>
           </div>
         </div>
       );
@@ -284,40 +278,23 @@ function SeoCustomerSection({ ticket, token }: { ticket: any; token: string }) {
       <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 sm:p-6 flex items-start gap-3">
         <Clock className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
         <div>
-          <p className="text-sm font-bold text-blue-800">جارٍ إعداد مقترحات المتجر الخاص بك</p>
-          <p className="text-xs text-blue-700 mt-1">فريقنا يعمل على تجهيز مقترحات الأسماء والدومينات. سيتم إبلاغك فور جاهزيتها.</p>
+          <p className="text-sm font-bold text-blue-800">جارٍ إعداد مقترحات الدومين لمتجرك</p>
+          <p className="text-xs text-blue-700 mt-1">فريقنا يعمل على تجهيز مقترحات الدومين. سيتم إبلاغك فور جاهزيتها.</p>
         </div>
       </div>
     );
   }
 
-  // SENT_TO_CLIENT: show selection cards
-  const nameOptions = [proposal.storeName1, proposal.storeName2, proposal.storeName3, proposal.storeName4].filter(Boolean);
+  // SENT_TO_CLIENT: show domain selection cards
   const domainOptions = [proposal.domain1, proposal.domain2, proposal.domain3, proposal.domain4].filter(Boolean);
 
   return (
     <div className="space-y-4">
       <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 sm:p-6 flex items-start gap-3">
-        <span className="text-xl">🏪</span>
+        <span className="text-xl">🌐</span>
         <div>
-          <p className="text-sm font-bold text-indigo-800">اختر اسم ودومين متجرك</p>
-          <p className="text-xs text-indigo-700 mt-1">فريقنا أعدّ لك مقترحات. اختر ما يناسبك أو اطلب تعديل.</p>
-        </div>
-      </div>
-
-      {/* Name selection */}
-      <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
-        <h4 className="text-xs font-bold text-slate-600">مقترحات الأسماء</h4>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {nameOptions.map((name: string) => (
-            <button key={name} onClick={() => setSelectedName(name)}
-              className={`p-3 rounded-xl border-2 text-sm font-bold text-right transition-all ${
-                selectedName === name ? 'border-indigo-500 bg-indigo-50 text-indigo-800' : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-indigo-300'
-              }`}>
-              {selectedName === name && <CheckCircle2 className="w-4 h-4 inline ml-2 text-indigo-600" />}
-              {name}
-            </button>
-          ))}
+          <p className="text-sm font-bold text-indigo-800">اختر دومين متجرك</p>
+          <p className="text-xs text-indigo-700 mt-1">فريقنا أعدّ لك مقترحات دومين. اختر ما يناسبك أو اطلب تعديل.</p>
         </div>
       </div>
 
@@ -348,15 +325,228 @@ function SeoCustomerSection({ ticket, token }: { ticket: any; token: string }) {
       )}
 
       <div className="flex flex-col sm:flex-row gap-3">
-        <button onClick={() => submitReview('APPROVE')} disabled={sending || !selectedName || !selectedDomain}
+        <button onClick={() => submitReview('APPROVE')} disabled={sending || !selectedDomain}
           className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50">
-          {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />} اعتماد الاختيارات
+          {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />} اعتماد الدومين
         </button>
         <button onClick={() => submitReview('REVISION')} disabled={sending}
           className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer">
           <PenLine className="w-4 h-4" /> طلب تعديل
         </button>
       </div>
+    </div>
+  );
+}
+
+// ═══════ SUPPLIER Customer Section (Drop Shipping) ═══════
+function SupplierCustomerSection({ ticket, token }: { ticket: any; token: string }) {
+  const [selection, setSelection] = useState<any>(null);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedId, setSelectedId] = useState('');
+  const [notes, setNotes] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const hdrs = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+  const { showToast } = useToast();
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`${API_URL}/api/tickets/${ticket.id}/product-supplier`, { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json()),
+      fetch(`${API_URL}/api/product-suppliers`).then(r => r.json()),
+    ]).then(([sel, sups]) => {
+      if (sel && sel.id) setSelection(sel);
+      if (Array.isArray(sups)) setSuppliers(sups);
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, [ticket.id, token]);
+
+  const submitSelection = async () => {
+    if (!selectedId) { setError('يرجى اختيار مزود'); return; }
+    const supplier = suppliers.find(s => s.id === selectedId);
+    if (!supplier) return;
+    setSending(true); setError(null);
+    try {
+      const res = await fetch(`${API_URL}/api/tickets/${ticket.id}/product-supplier/client-select`, {
+        method: 'PUT', headers: hdrs, body: JSON.stringify({ supplierId: selectedId, supplierName: supplier.name, notes })
+      });
+      if (res.ok) { setSelection(await res.json()); showToast('تم اعتماد اختيارك بنجاح ✅'); }
+      else { const e = await res.json(); setError(e.error); }
+    } catch { setError('تعذر الاتصال'); }
+    finally { setSending(false); }
+  };
+
+  const submitFileReview = async (action: 'APPROVE' | 'REVISION') => {
+    if (action === 'REVISION' && !notes.trim()) { setError('يرجى كتابة ملاحظات التعديل'); return; }
+    setSending(true); setError(null);
+    try {
+      const res = await fetch(`${API_URL}/api/tickets/${ticket.id}/product-supplier/client-file-review`, {
+        method: 'PUT', headers: hdrs, body: JSON.stringify({ action, notes })
+      });
+      if (res.ok) { setSelection(await res.json()); showToast(action === 'APPROVE' ? 'تم اعتماد المنتجات بنجاح ✅' : 'تم إرسال طلب التعديل'); setNotes(''); }
+      else { const e = await res.json(); setError(e.error); }
+    } catch { setError('تعذر الاتصال'); }
+    finally { setSending(false); }
+  };
+
+  if (loading) return null;
+  if (!selection) return null;
+
+  // FINALIZED or CLIENT_APPROVED_FILE — final green badge
+  if (selection.status === 'CLIENT_APPROVED_FILE' || selection.status === 'FINALIZED') {
+    return (
+      <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 sm:p-6 flex items-start gap-3">
+        <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-bold text-emerald-800">تم اعتماد المنتجات ✅</p>
+          <p className="text-xs text-emerald-700 mt-1">المزود: <strong>{selection.selectedSupplierName}</strong></p>
+        </div>
+      </div>
+    );
+  }
+
+  // CLIENT_REVISION_FILE — revision sent, waiting for SEO
+  if (selection.status === 'CLIENT_REVISION_FILE') {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-6 flex items-start gap-3">
+        <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-bold text-amber-800">تم إرسال طلب التعديل</p>
+          <p className="text-xs text-amber-700 mt-1">فريقنا يعمل على تحديث ملف المنتجات حسب ملاحظاتك. سيتم إبلاغك فور جاهزيته.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // SENT_FILE_TO_CLIENT — show file/link + approve/revision
+  if (selection.status === 'SENT_FILE_TO_CLIENT') {
+    return (
+      <div className="space-y-4">
+        <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 sm:p-6 flex items-start gap-3">
+          <span className="text-xl">📦</span>
+          <div>
+            <p className="text-sm font-bold text-indigo-800">ملف المنتجات جاهز للمراجعة</p>
+            <p className="text-xs text-indigo-700 mt-1">راجع ملف المنتجات أدناه ثم اعتمده أو اطلب تعديل.</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+          {selection.productFileUrl && (() => {
+            const ext = selection.productFileUrl.split('.').pop()?.toLowerCase() || '';
+            const viewable = ['pdf','png','jpg','jpeg','gif','webp','svg','txt'].includes(ext);
+            const previewUrl = viewable ? selection.productFileUrl : `${API_URL}/api/file-preview?url=${encodeURIComponent(selection.productFileUrl)}`;
+            return (
+            <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-xl border border-blue-200">
+              <FileText className="w-5 h-5 text-blue-600 shrink-0" />
+              <span className="flex-1 text-sm font-bold text-blue-800">ملف المنتجات</span>
+              <a href={previewUrl} target="_blank" rel="noreferrer"
+                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold text-xs cursor-pointer flex items-center gap-1.5">
+                <Eye className="w-3.5 h-3.5" /> معاينة
+              </a>
+              <a href={selection.productFileUrl} download target="_blank" rel="noreferrer"
+                className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors font-bold text-xs cursor-pointer flex items-center gap-1.5">
+                <Download className="w-3.5 h-3.5" /> تحميل
+              </a>
+            </div>
+            );
+          })()}
+          {selection.productLink && (
+            <div className="flex items-center gap-3 p-3 bg-teal-50 rounded-xl border border-teal-200">
+              <ExternalLink className="w-5 h-5 text-teal-600 shrink-0" />
+              <span className="flex-1 text-sm font-bold text-teal-800">رابط المنتجات</span>
+              <a href={selection.productLink} target="_blank" rel="noreferrer"
+                className="px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-bold text-xs cursor-pointer flex items-center gap-1.5">
+                <ExternalLink className="w-3.5 h-3.5" /> فتح الرابط
+              </a>
+            </div>
+          )}
+        </div>
+
+        {error && <p className="text-xs text-red-600 font-bold bg-red-50 border border-red-200 rounded-xl p-3">{error}</p>}
+
+        <textarea value={notes} onChange={e => setNotes(e.target.value)}
+          placeholder="ملاحظات (مطلوبة في حالة طلب التعديل)..." rows={2}
+          className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none" />
+
+        <div className="flex gap-2">
+          <button onClick={() => submitFileReview('APPROVE')} disabled={sending}
+            className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer">
+            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />} اعتماد المنتجات
+          </button>
+          <button onClick={() => submitFileReview('REVISION')} disabled={sending}
+            className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer">
+            <PenLine className="w-4 h-4" /> طلب تعديل
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // CLIENT_SELECTED or FILE_UPLOADED — waiting for SEO to send file
+  if (selection.status === 'CLIENT_SELECTED' || selection.status === 'FILE_UPLOADED') {
+    return (
+      <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 sm:p-6 flex items-start gap-3">
+        <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-bold text-emerald-800">تم اختيار مزود المنتجات ✅</p>
+          <p className="text-xs text-emerald-700 mt-1">المزود المختار: <strong>{selection.selectedSupplierName}</strong></p>
+        </div>
+      </div>
+    );
+  }
+
+  // Not sent to client yet
+  if (selection.status !== 'SENT_TO_CLIENT') return null;
+
+  // SENT_TO_CLIENT — show supplier cards
+  return (
+    <div className="space-y-4">
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-6 flex items-start gap-3">
+        <span className="text-xl">🏪</span>
+        <div>
+          <p className="text-sm font-bold text-amber-800">اختر مزود المنتجات لمتجرك</p>
+          <p className="text-xs text-amber-700 mt-1">اختر المزود الذي يناسب احتياجاتك لتوفير المنتجات لمتجرك.</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {suppliers.map(s => {
+          const isSelected = selectedId === s.id;
+          return (
+            <button key={s.id} onClick={() => setSelectedId(s.id)}
+              className={`relative p-4 rounded-2xl border-2 transition-all text-right cursor-pointer ${
+                isSelected
+                  ? 'border-emerald-500 bg-emerald-50 shadow-lg shadow-emerald-100'
+                  : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-md'
+              }`}>
+              {isSelected && (
+                <div className="absolute top-2 left-2 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center">
+                  <CheckCircle2 className="w-4 h-4 text-white" />
+                </div>
+              )}
+              {s.imageUrl ? (
+                <img src={s.imageUrl} alt={s.name} className="w-14 h-14 rounded-xl object-contain bg-slate-50 border border-slate-100 p-1.5 mb-3" />
+              ) : (
+                <div className="w-14 h-14 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center mb-3">
+                  <span className="text-2xl">🏪</span>
+                </div>
+              )}
+              <p className="text-sm font-bold text-slate-800">{s.name}</p>
+              {s.description && <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">{s.description}</p>}
+            </button>
+          );
+        })}
+      </div>
+
+      {error && <p className="text-xs text-red-600 font-bold bg-red-50 border border-red-200 rounded-xl p-3">{error}</p>}
+
+      <textarea value={notes} onChange={e => setNotes(e.target.value)}
+        placeholder="ملاحظات إضافية (اختياري)..." rows={2}
+        className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300 resize-none" />
+
+      <button onClick={submitSelection} disabled={sending || !selectedId}
+        className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer">
+        {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />} اعتماد الاختيار
+      </button>
     </div>
   );
 }
@@ -368,19 +558,38 @@ function DesignCustomerSection({ ticket, token }: { ticket: any; token: string }
   const [notes, setNotes] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const hdrs = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
   const { showToast } = useToast();
   useEffect(() => {
     fetch(`${API_URL}/api/tickets/${ticket.id}/design-delivery`, { headers: { 'Authorization': `Bearer ${token}` } })
-      .then(r => r.json()).then(d => { if (d && d.id) setDelivery(d); })
+      .then(r => r.json()).then(d => {
+        if (d && d.id) {
+          setDelivery(d);
+          // Auto-select if only 1 image
+          let imgs: string[] = [];
+          try { imgs = JSON.parse(d.images || '[]'); } catch {}
+          if (imgs.length === 1) setSelectedImage(imgs[0]);
+          if (imgs.length > 0) setPreviewUrl(imgs[0]);
+        }
+      })
       .catch(() => {}).finally(() => setLoading(false));
   }, [ticket.id, token]);
 
   const submitReview = async (action: 'APPROVE' | 'REVISION') => {
+    if (action === 'APPROVE') {
+      let imgs: string[] = [];
+      try { imgs = JSON.parse(delivery?.images || '[]'); } catch {}
+      if (imgs.length > 1 && !selectedImage && !delivery?.selectedImageUrl) {
+        setError('يرجى اختيار تصميم واحد من التصاميم المتاحة قبل الاعتماد');
+        return;
+      }
+    }
     setSending(true); setError(null);
     try {
       const res = await fetch(`${API_URL}/api/tickets/${ticket.id}/design-delivery/client-review`, {
-        method: 'PUT', headers: hdrs, body: JSON.stringify({ action, notes })
+        method: 'PUT', headers: hdrs, body: JSON.stringify({ action, notes, selectedImageUrl: selectedImage || delivery?.selectedImageUrl })
       });
       if (res.ok) { setDelivery(await res.json()); showToast(action === 'APPROVE' ? 'تم اعتماد التصميم بنجاح ✅' : 'تم إرسال طلب التعديل'); }
       else { const e = await res.json(); setError(e.error); }
@@ -390,12 +599,20 @@ function DesignCustomerSection({ ticket, token }: { ticket: any; token: string }
 
   if (loading) return null;
 
-  // Approved
+  // Approved — show selected design
   if (delivery?.status === 'CLIENT_APPROVED') {
     return (
-      <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 sm:p-6 flex items-start gap-3">
-        <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-        <div><p className="text-sm font-bold text-emerald-800">تم اعتماد التصميم ✅</p><p className="text-xs text-emerald-700 mt-1">شكراً! جاري تحويل الطلب لفريق التطوير.</p></div>
+      <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 sm:p-6 space-y-3">
+        <div className="flex items-start gap-3">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+          <div><p className="text-sm font-bold text-emerald-800">تم اعتماد التصميم ✅</p><p className="text-xs text-emerald-700 mt-1">شكراً! جاري تحويل الطلب لفريق التطوير.</p></div>
+        </div>
+        {delivery.selectedImageUrl && (
+          <div className="mt-3">
+            <p className="text-[10px] text-emerald-600 font-bold mb-2">التصميم المعتمد:</p>
+            <img src={delivery.selectedImageUrl} alt="التصميم المعتمد" className="w-full max-w-xs rounded-xl border-2 border-emerald-300" />
+          </div>
+        )}
       </div>
     );
   }
@@ -410,38 +627,206 @@ function DesignCustomerSection({ ticket, token }: { ticket: any; token: string }
     );
   }
 
-  // SENT_TO_CLIENT: show gallery + actions
+  // SENT_TO_CLIENT: show selectable gallery + actions
   let imgs: string[] = [];
   try { imgs = JSON.parse(delivery.images || '[]'); } catch {}
+  const hasMultiple = imgs.length > 1;
+
+  // Was logo previously chosen? If re-sent, don't show selection grid again
+  const wasPreviouslyApproved = !!delivery.selectedImageUrl;
 
   return (
     <div className="space-y-4">
       <div className="bg-violet-50 border border-violet-200 rounded-2xl p-4 sm:p-6 flex items-start gap-3">
         <Palette className="w-5 h-5 text-violet-600 shrink-0 mt-0.5" />
-        <div><p className="text-sm font-bold text-violet-800">تصميم متجرك جاهز للاعتماد</p><p className="text-xs text-violet-700 mt-1">راجع التصاميم أدناه واعتمدها أو اطلب تعديل.</p></div>
+        <div>
+          <p className="text-sm font-bold text-violet-800">{wasPreviouslyApproved ? 'تم تحديث التصميم — يرجى المراجعة' : 'تصميم متجرك جاهز للاعتماد'}</p>
+          <p className="text-xs text-violet-700 mt-1">
+            {wasPreviouslyApproved
+              ? 'راجع التحديثات أدناه واعتمد أو اطلب تعديل.'
+              : hasMultiple ? 'اختر التصميم المناسب من الخيارات أدناه ثم اعتمده أو اطلب تعديل.' : 'راجع التصميم أدناه واعتمده أو اطلب تعديل.'}
+          </p>
+        </div>
       </div>
+
+      {/* Staff Message — رسالة الموظف */}
+      {delivery.staffMessage && (
+        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 sm:p-5 flex items-start gap-3">
+          <div className="w-9 h-9 bg-blue-100 rounded-xl flex items-center justify-center shrink-0">
+            <MessageSquare className="w-4 h-4 text-blue-600" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-blue-500 mb-1">رسالة من فريق العمل</p>
+            <p className="text-sm text-blue-900 leading-relaxed whitespace-pre-wrap">{delivery.staffMessage}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Figma link */}
       {delivery.figmaLink && (
         <a href={ensureUrl(delivery.figmaLink)} target="_blank" rel="noreferrer"
           className="flex items-center gap-2 px-4 py-3 bg-white border border-violet-200 rounded-xl text-sm font-bold text-violet-700 hover:bg-violet-50">
           <ExternalLink className="w-4 h-4" /> عرض التصميم في Figma
         </a>
       )}
-      {imgs.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {imgs.map((url: string, i: number) => (
-            <a key={i} href={normalizeUrl(url) || url} target="_blank" rel="noreferrer">
-              <img src={url} alt={`تصميم ${i + 1}`} className="w-full rounded-xl border border-slate-200 hover:opacity-90 transition-opacity" />
-            </a>
-          ))}
+
+      {/* Previously approved logo — show as reference */}
+      {wasPreviouslyApproved && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 space-y-2">
+          <p className="text-xs font-bold text-emerald-700">🎨 التصميم المعتمد سابقاً:</p>
+          <img src={delivery.selectedImageUrl} alt="التصميم المعتمد" className="w-full max-w-xs rounded-xl border-2 border-emerald-300" />
         </div>
       )}
+
+      {/* Design images — selectable cards (HIDDEN if previously approved) */}
+      {!wasPreviouslyApproved && imgs.length > 0 && (
+        <div className="space-y-6">
+          {hasMultiple ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 px-1">
+                <ImageIcon className="w-4 h-4 text-violet-600" />
+                <p className="text-xs font-bold text-violet-700">اضغط على الصور للمعاينة والاعتماد:</p>
+              </div>
+
+              {/* Main Preview Box */}
+              {(() => {
+                const currentPreview = previewUrl || imgs[0];
+                const isCurrentSelected = selectedImage === currentPreview;
+                return (
+                  <div className="flex flex-col items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedImage(currentPreview)}
+                      className={`relative max-w-sm w-full bg-white rounded-3xl border-2 p-6 flex items-center justify-center aspect-square overflow-hidden group transition-all duration-300 cursor-pointer shadow-sm hover:shadow-lg ${
+                        isCurrentSelected
+                          ? 'border-emerald-500 ring-4 ring-emerald-100/80 scale-[1.01]'
+                          : 'border-slate-200 hover:border-violet-400'
+                      }`}
+                    >
+                      <img
+                        src={currentPreview}
+                        alt="معاينة التصميم"
+                        className="max-h-full max-w-full object-contain transition-transform duration-500 group-hover:scale-[1.03]"
+                      />
+
+                      {/* Header indicators */}
+                      <div className="absolute top-4 right-4 bg-slate-900/80 backdrop-blur-sm text-white px-2.5 py-1 rounded-full text-[9px] font-bold shadow-sm">
+                        تصميم {imgs.indexOf(currentPreview) + 1} من {imgs.length}
+                      </div>
+
+                      {isCurrentSelected ? (
+                        <div className="absolute top-4 left-4 bg-emerald-500 text-white px-2.5 py-1 rounded-full text-[9px] font-bold shadow-sm flex items-center gap-1 animate-in zoom-in duration-200">
+                          <CheckCircle className="w-3 h-3" /> تم الاختيار
+                        </div>
+                      ) : (
+                        <div className="absolute top-4 left-4 bg-violet-600 text-white px-2.5 py-1 rounded-full text-[9px] font-bold shadow-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                          اضغط للتحديد
+                        </div>
+                      )}
+
+                      {/* Selection overlay indicator */}
+                      {isCurrentSelected && (
+                        <div className="absolute inset-0 bg-emerald-500/5 flex items-center justify-center pointer-events-none">
+                          <div className="bg-emerald-500 text-white rounded-full p-2.5 shadow-lg animate-in zoom-in duration-200">
+                            <CheckCircle className="w-7 h-7" />
+                          </div>
+                        </div>
+                      )}
+                    </button>
+
+                    {/* Quick selection button for this preview */}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedImage(isCurrentSelected ? null : currentPreview)}
+                      className={`px-6 py-2 rounded-xl text-xs font-bold transition-all duration-200 flex items-center gap-1.5 ${
+                        isCurrentSelected
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                          : 'bg-violet-600 text-white hover:bg-violet-700 shadow-sm shadow-violet-100'
+                      }`}
+                    >
+                      {isCurrentSelected ? (
+                        <>✓ معتمد كاختيارك الحالي</>
+                      ) : (
+                        <>اختر هذا التصميم (تصميم {imgs.indexOf(currentPreview) + 1})</>
+                      )}
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {/* Thumbnails Row */}
+              <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+                {imgs.map((url: string, i: number) => {
+                  const isCurrentPreview = (previewUrl || imgs[0]) === url;
+                  const isSelected = selectedImage === url;
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => {
+                        setPreviewUrl(url);
+                        // Also select it to make it easy, or just let them preview.
+                        // Let's just update the preview so they can choose
+                      }}
+                      className={`w-16 h-16 sm:w-20 sm:h-20 bg-white rounded-2xl border-2 p-2.5 flex items-center justify-center cursor-pointer transition-all duration-300 relative overflow-hidden ${
+                        isCurrentPreview
+                          ? 'border-violet-600 ring-4 ring-violet-100 scale-105 shadow-md'
+                          : isSelected
+                            ? 'border-emerald-500 shadow-sm'
+                            : 'border-slate-200 hover:border-violet-300 hover:-translate-y-0.5'
+                      }`}
+                    >
+                      <img src={url} alt={`صورة مصغرة ${i + 1}`} className="max-h-full max-w-full object-contain" />
+                      
+                      {/* Label on thumbnail */}
+                      <div className={`absolute bottom-0 inset-x-0 text-center py-0.5 text-[8px] font-bold ${
+                        isCurrentPreview
+                          ? 'bg-violet-600 text-white'
+                          : isSelected
+                            ? 'bg-emerald-500 text-white'
+                            : 'bg-slate-50 text-slate-500'
+                      }`}>
+                        تصميم {i + 1}
+                      </div>
+
+                      {/* Small select dot indicator */}
+                      {isSelected && !isCurrentPreview && (
+                        <div className="absolute top-1 left-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-white" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            /* Single Image Display */
+            <div className="flex flex-col items-center">
+              <div className="max-w-sm w-full bg-white rounded-3xl border-2 border-slate-100 shadow-lg p-6 sm:p-8 flex items-center justify-center aspect-square overflow-hidden group">
+                <img
+                  src={imgs[0]}
+                  alt="تصميم المتجر"
+                  className="max-h-full max-w-full object-contain transition-transform duration-500 group-hover:scale-[1.02]"
+                />
+              </div>
+            </div>
+          )}
+
+          {hasMultiple && !selectedImage && (
+            <p className="text-[11px] text-amber-600 font-bold flex items-center gap-1.5 px-1 justify-center">
+              <AlertCircle className="w-3.5 h-3.5" />
+              يجب اختيار تصميم واحد قبل الاعتماد
+            </p>
+          )}
+        </div>
+      )}
+
       <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="ملاحظات (اختياري)..." rows={3}
         className="w-full text-sm border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:outline-none resize-none" />
       {error && <div className="flex items-start gap-2 p-3 bg-red-50 rounded-xl border border-red-100"><AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" /><p className="text-xs text-red-700">{error}</p></div>}
       <div className="flex flex-col sm:flex-row gap-3">
-        <button onClick={() => submitReview('APPROVE')} disabled={sending}
+        <button onClick={() => submitReview('APPROVE')} disabled={sending || (!wasPreviouslyApproved && hasMultiple && !selectedImage)}
           className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer">
-          <ThumbsUp className="w-4 h-4" /> اعتماد التصميم
+          <ThumbsUp className="w-4 h-4" /> {wasPreviouslyApproved ? 'اعتماد التحديثات' : selectedImage && hasMultiple ? 'اعتماد التصميم المختار' : 'اعتماد التصميم'}
         </button>
         <button onClick={() => submitReview('REVISION')} disabled={sending}
           className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer">
@@ -646,22 +1031,55 @@ function DeliveredCustomerSection({ ticket, token }: { ticket: any; token: strin
         )}
 
         {imgs.length > 0 && (
-          <div>
-            <p className="text-[10px] text-emerald-600 font-bold mb-2">التصاميم المعتمدة</p>
-            <div className="grid grid-cols-3 gap-2">
-              {imgs.map((url: string, i: number) => (
-                <a key={i} href={normalizeUrl(url) || url} target="_blank" rel="noreferrer">
-                  <img src={url} alt={`تصميم ${i + 1}`} className="w-full h-16 object-cover rounded-lg border border-slate-200" />
-                </a>
-              ))}
+          <div className="space-y-2">
+            <p className="text-[10px] text-emerald-600 font-bold">التصاميم المعتمدة</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {imgs.map((url: string, i: number) => {
+                const normUrl = normalizeUrl(url) || url;
+                return (
+                  <div key={i} className="group relative rounded-xl border border-slate-200 overflow-hidden bg-slate-50 aspect-video sm:aspect-square hover:shadow-md transition-shadow">
+                    <img
+                      src={normUrl}
+                      alt={`تصميم ${i + 1}`}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <a
+                        href={normUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="bg-white p-2 rounded-full text-slate-800 hover:bg-slate-100 shadow transition-colors"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
 
         {ticket.aiProposal?.generatedLogoUrl && (
-          <div>
-            <p className="text-[10px] text-emerald-600 font-bold mb-1">الشعار</p>
-            <img src={ticket.aiProposal.generatedLogoUrl} alt="الشعار" className="w-16 h-16 rounded-xl object-contain bg-slate-50 border" />
+          <div className="space-y-2">
+            <p className="text-[10px] text-emerald-600 font-bold">الشعار المعتمد</p>
+            <div className="group relative rounded-xl border border-slate-200 overflow-hidden bg-slate-50 w-24 h-24 hover:shadow-md transition-shadow p-2">
+              <img
+                src={normalizeUrl(ticket.aiProposal.generatedLogoUrl) || ''}
+                alt="الشعار"
+                className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+              />
+              <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-xl">
+                <a
+                  href={normalizeUrl(ticket.aiProposal.generatedLogoUrl) || ''}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="bg-white p-2 rounded-full text-slate-800 hover:bg-slate-100 shadow transition-colors"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -851,7 +1269,7 @@ export function CustomerDashboard() {
       {/* Desktop Sidebar — hidden on mobile */}
       <aside className="hidden lg:flex w-72 bg-white border-l border-slate-200 flex-col h-screen sticky top-0 z-20">
         <div className="p-8 border-b border-slate-100">
-          <div className="text-2xl font-bold bg-gradient-to-l from-blue-600 to-indigo-600 bg-clip-text text-transparent"> نظام الوكالة</div>
+          <div className="text-2xl font-bold bg-gradient-to-l from-blue-600 to-indigo-600 bg-clip-text text-transparent">ادتوبيا</div>
         </div>
         <nav className="flex-1 p-6 space-y-2">
           <button onClick={() => setActiveTab('tracking')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all ${activeTab === 'tracking' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
@@ -876,7 +1294,7 @@ export function CustomerDashboard() {
 
       {/* Mobile Top Bar */}
       <div className="lg:hidden sticky top-0 z-30 bg-white/90 backdrop-blur-lg border-b border-slate-100 px-4 py-3 flex items-center justify-between">
-        <div className="text-lg font-bold bg-gradient-to-l from-blue-600 to-indigo-600 bg-clip-text text-transparent">منصة سلة</div>
+        <div className="text-lg font-bold bg-gradient-to-l from-blue-600 to-indigo-600 bg-clip-text text-transparent">ادتوبيا</div>
         <div className="flex gap-1">
           <button onClick={() => setActiveTab('tracking')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activeTab === 'tracking' ? 'bg-blue-50 text-blue-600' : 'text-slate-400'}`}>تتبع</button>
           <button onClick={() => setActiveTab('profile')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activeTab === 'profile' ? 'bg-blue-50 text-blue-600' : 'text-slate-400'}`}>بياناتي</button>
@@ -939,10 +1357,8 @@ export function CustomerDashboard() {
               <DesignCustomerSection ticket={ticket} token={token!} />
             )}
 
-            {/* 🔧 DEVELOPMENT STAGE — Customer View */}
-            {ticket.stage === 'DEVELOPMENT' && (
-              <DevCustomerSection ticket={ticket} token={token!} />
-            )}
+            {/* 🏪 Supplier Selection — shows in all stages when SENT_TO_CLIENT */}
+            <SupplierCustomerSection ticket={ticket} token={token!} />
 
             {/* 📋 SEO_FINAL STAGE — Customer View */}
             {ticket.stage === 'SEO_FINAL' && (
@@ -988,7 +1404,7 @@ export function CustomerDashboard() {
                           : 'bg-amber-50 border-amber-200 text-amber-700'
                       }`}>
                         {c.docsApproved ? (
-                          <><CheckCircle2 className="w-3 h-3" /> تمت المراجعة</>
+                          <><CheckCircle2 className="w-3 h-3" /> تم الاعتماد</>
                         ) : (
                           <><Clock className="w-3 h-3" /> قيد المراجعة</>
                         )}

@@ -19,11 +19,9 @@ const TASK_GROUPS = [
     { key: 'shippingTested', label: 'اختبار عملية الشحن' },
   ]},
   { title: '🔍 تحسينات SEO', tasks: [
-    { key: 'pageTitlesSet', label: 'إعداد عناوين الصفحات' },
+    { key: 'seoHomePage', label: 'تحسينات الـSEO للصفحة الرئيسية للمتجر' },
+    { key: 'seoCategoriesPage', label: 'تحسينات الـSEO للأقسام الخاصة بالمتجر' },
     { key: 'metaDescSet', label: 'إعداد الوصف التعريفي (Meta Description)' },
-    { key: 'urlsOptimized', label: 'تحسين الروابط (URLs)' },
-    { key: 'productsOptimized', label: 'تحسين الأقسام والمنتجات لمحركات البحث' },
-    { key: 'contentReviewed', label: 'مراجعة المحتوى' },
     { key: 'finalInspection', label: 'إجراء فحص نهائي للمتجر' },
   ]},
 ];
@@ -97,18 +95,7 @@ export function SeoFinalSection({ ticket, headers, userRole, onRefresh, setError
     saveChecklist(next);
   };
 
-  const sendToAm = async () => {
-    setReviewLoading(true);
-    try {
-      const res = await fetch(`${API}/api/tickets/${ticket.id}/seo-final/send-to-am`, {
-        method: 'PUT', headers, body: JSON.stringify({ brief })
-      });
-      if (res.ok) { setChecklist(await res.json()); showToast('تم إرسال المهام لمدير الحساب ✅'); onRefresh(); }
-      else { const e = await res.json(); setErrorModal(e.error); }
-    } catch { setErrorModal('تعذر الاتصال'); }
-    finally { setReviewLoading(false); }
-  };
-
+  // AM review — changes sub-status only, NOT ticket.stage
   const amReview = async (action: string) => {
     setReviewLoading(true);
     try {
@@ -124,28 +111,6 @@ export function SeoFinalSection({ ticket, headers, userRole, onRefresh, setError
       else { const e = await res.json(); setErrorModal(e.error); }
     } catch { setErrorModal('تعذر الاتصال'); }
     finally { setReviewLoading(false); }
-  };
-
-  const sendToClient = async () => {
-    setReviewLoading(true);
-    try {
-      const res = await fetch(`${API}/api/tickets/${ticket.id}/seo-final/send-to-client`, { method: 'PUT', headers });
-      if (res.ok) { setChecklist(await res.json()); showToast('تم عرض المهام على العميل ✅'); onRefresh(); }
-      else { const e = await res.json(); setErrorModal(e.error); }
-    } catch { setErrorModal('تعذر الاتصال'); }
-    finally { setReviewLoading(false); }
-  };
-
-  const finalDeliver = async () => {
-    setDelivering(true);
-    try {
-      const res = await fetch(`${API}/api/tickets/${ticket.id}/final-delivery`, {
-        method: 'PUT', headers, body: JSON.stringify({ notes: deliveryNotes })
-      });
-      if (res.ok) { showToast('تم تسليم المتجر بنجاح 🎉'); onRefresh(); }
-      else { const e = await res.json(); setErrorModal(e.error); }
-    } catch { setErrorModal('تعذر الاتصال'); }
-    finally { setDelivering(false); }
   };
 
   const status = checklist?.status || 'IN_PROGRESS';
@@ -223,15 +188,12 @@ export function SeoFinalSection({ ticket, headers, userRole, onRefresh, setError
         );
       })}
 
-      {/* Send to AM */}
+      {/* All done notice */}
       {allDone && status === 'IN_PROGRESS' && (
-        <div className="bg-teal-50 rounded-2xl border border-teal-200 p-4 space-y-3">
-          <textarea value={brief} onChange={e => setBrief(e.target.value)} placeholder="بريف لمدير الحساب..." rows={3}
-            className="w-full text-xs border border-teal-200 rounded-xl px-3 py-2 bg-white focus:outline-none resize-none" />
-          <button onClick={sendToAm} disabled={reviewLoading}
-            className="w-full py-3 bg-teal-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer">
-            <Send className="w-4 h-4" /> {reviewLoading ? 'جاري الإرسال...' : 'إرسال لمدير الحساب للمراجعة'}
-          </button>
+        <div className="bg-emerald-50 rounded-2xl border border-emerald-200 p-4">
+          <p className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5" /> ✅ تم إكمال جميع المهام
+          </p>
         </div>
       )}
 
@@ -338,30 +300,21 @@ export function SeoFinalSection({ ticket, headers, userRole, onRefresh, setError
         </div>
       )}
 
-      {isAM && status === 'AM_APPROVED' && (
-        <button onClick={sendToClient} disabled={reviewLoading}
-          className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer">
-          <Send className="w-4 h-4" /> عرض على العميل
-        </button>
+      {/* AM_APPROVED — info for all */}
+      {status === 'AM_APPROVED' && (
+        <div className="bg-emerald-50 rounded-2xl border border-emerald-200 p-4">
+          <p className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5" /> معتمد من مدير الحساب ✅
+          </p>
+        </div>
       )}
 
-      {/* Final delivery section */}
-      {isAM && status === 'CLIENT_APPROVED' && (
-        <div className="bg-emerald-50 rounded-2xl border border-emerald-200 p-4 space-y-4">
-          <p className="text-sm font-bold text-emerald-800">✅ العميل اعتمد — جاهز للتسليم</p>
-          <div className="bg-white rounded-xl p-4 space-y-2 border border-emerald-100 text-xs text-slate-700">
-            {proposal?.selectedName && <p><strong>اسم المتجر:</strong> {proposal.selectedName}</p>}
-            {proposal?.selectedDomain && <p><strong>الدومين:</strong> {proposal.selectedDomain}</p>}
-            {seoChecklist?.storeEmail && <p><strong>إيميل المتجر:</strong> {seoChecklist.storeEmail}</p>}
-            {seoChecklist?.storePassword && <p><strong>كلمة المرور:</strong> {'•'.repeat(8)}</p>}
-            {delivery?.figmaLink && <p><strong>رابط فيجما:</strong> <a href={ensureUrl(delivery.figmaLink)} target="_blank" rel="noreferrer" className="text-violet-600 underline">فتح</a></p>}
-          </div>
-          <textarea value={deliveryNotes} onChange={e => setDeliveryNotes(e.target.value)} placeholder="ملاحظات التسليم (اختياري)..." rows={3}
-            className="w-full text-xs border border-emerald-200 rounded-xl px-3 py-2 bg-white focus:outline-none resize-none" />
-          <button onClick={finalDeliver} disabled={delivering}
-            className="w-full py-4 bg-emerald-600 text-white rounded-xl font-bold text-base flex items-center justify-center gap-2 hover:bg-emerald-700 disabled:opacity-50 cursor-pointer">
-            {delivering ? <><Clock className="w-5 h-5 animate-spin" /> جاري التسليم...</> : <>🎉 تسليم المتجر للعميل</>}
-          </button>
+      {/* CLIENT_APPROVED — info for all */}
+      {status === 'CLIENT_APPROVED' && (
+        <div className="bg-emerald-50 rounded-2xl border border-emerald-200 p-4">
+          <p className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5" /> ✅ العميل اعتمد
+          </p>
         </div>
       )}
     </div>

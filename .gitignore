@@ -44,3 +44,4 @@ coverage/
 
 # Prisma
 prisma/*.db
+frontend/.env.development 

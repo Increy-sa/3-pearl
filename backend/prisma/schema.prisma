@@ -168,10 +168,12 @@ model Ticket {
   finalDeliveryNotes String?   // ملاحظات التسليم النهائي من AM
   isDelivered        Boolean   @default(false)
   deliveredAt        DateTime?
+  showCredentialsToDev Boolean  @default(false)
 
   notifications    Notification[]
   auditLogs        AuditLog[]
   seoChecklist     SeoChecklist?
+  productSupplierSelection ProductSupplierSelection?
 }
 
 // ─── Notification ──────────────────────────────────────────────
@@ -321,10 +323,13 @@ model DesignDelivery {
   figmaLink       String?           // رابط فيجما
   images          String?           // JSON array من روابط الصور
   
-  status          String   @default("DRAFT")  // DRAFT | SENT_TO_SEO | SEO_APPROVED | SEO_REVISION | SENT_TO_CLIENT | CLIENT_APPROVED | CLIENT_REVISION
+  status          String   @default("DRAFT")  // DRAFT | SENT_TO_SEO | SEO_APPROVED | SEO_REVISION | SENT_TO_AM | AM_APPROVED | AM_REVISION | SENT_TO_CLIENT | CLIENT_APPROVED | CLIENT_REVISION
   
   seoNotes        String?
+  amNotes         String?
   clientNotes     String?
+  staffMessage    String?           // رسالة الموظف للعميل عند إرسال التصاميم
+  selectedImageUrl String?           // التصميم المختار من العميل
   
   isFinalized     Boolean  @default(false)
   
@@ -347,6 +352,7 @@ model DevChecklist {
   
   seoReviewStatus       String?  @default("PENDING")  // PENDING | APPROVED | REVISION
   seoReviewNotes        String?
+  devBriefToSeo         String?
   
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -369,11 +375,9 @@ model SeoFinalChecklist {
   shippingTested        Boolean  @default(false)
   
   // تحسينات SEO
-  pageTitlesSet         Boolean  @default(false)
+  seoHomePage           Boolean  @default(false)
+  seoCategoriesPage     Boolean  @default(false)
   metaDescSet           Boolean  @default(false)
-  urlsOptimized         Boolean  @default(false)
-  productsOptimized     Boolean  @default(false)
-  contentReviewed       Boolean  @default(false)
   finalInspection       Boolean  @default(false)
   
   // حالة التسليم
@@ -383,6 +387,37 @@ model SeoFinalChecklist {
   clientNotes           String?
   isFinalized           Boolean  @default(false)
   
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+// ─── Product Supplier (Admin-managed — Drop Shipping) ───────────
+model ProductSupplier {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  imageUrl    String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ─── Product Supplier Selection (Client Choice) ─────────────────
+model ProductSupplierSelection {
+  id                    String   @id @default(uuid())
+  ticketId              String   @unique
+  ticket                Ticket   @relation(fields: [ticketId], references: [id])
+
+  selectedSupplierId    String?
+  selectedSupplierName  String?
+  status                String   @default("PENDING")  // PENDING | SENT_TO_CLIENT | CLIENT_SELECTED | FILE_UPLOADED
+
+  productFileUrl        String?
+  productLink           String?
+
+  clientNotes           String?
+
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }

@@ -3,7 +3,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { TicketDetailPanel } from '../../components/staff/TicketDetailPanel';
 import {
   Loader2, AlertTriangle, RefreshCw, Activity, Eye, EyeOff,
-  Trash2, Archive, ArchiveRestore
+  Trash2, Archive, ArchiveRestore, Search, Clock, Sparkles, CalendarDays, X
 } from 'lucide-react';
 
 import { API_URL } from '../../config/api';
@@ -71,6 +71,11 @@ export function StaffDashboard() {
   const [selectedTicket, setSelectedTicket] = useState<any>(null);
   const [stageFilter, setStageFilter]       = useState('ALL');
   const [viewMode, setViewMode]             = useState<'active' | 'archived'>('active');
+  const [searchQuery, setSearchQuery]       = useState('');
+  const [slaFilter, setSlaFilter]           = useState<'ALL' | 'BREACHED' | 'OK'>('ALL');
+  const [dateFrom, setDateFrom]             = useState('');
+  const [dateTo, setDateTo]                 = useState('');
+  const [showDateFilter, setShowDateFilter] = useState(false);
   const selectedTicketIdRef = useRef<string | null>(null);
 
   // Confirmation modal state
@@ -154,9 +159,36 @@ export function StaffDashboard() {
   const currentList = viewMode === 'archived' ? archivedTickets : tickets;
 
   const visibleTickets = useMemo(() => {
-    if (stageFilter === 'ALL') return currentList;
-    return currentList.filter(t => t.stage === stageFilter);
-  }, [currentList, stageFilter]);
+    let list = currentList;
+    // Stage filter
+    if (stageFilter !== 'ALL') list = list.filter(t => t.stage === stageFilter);
+    // SLA filter
+    if (slaFilter === 'BREACHED') list = list.filter(t => t.slaBreached);
+    else if (slaFilter === 'OK') list = list.filter(t => !t.slaBreached);
+    // Date range filter
+    if (dateFrom) {
+      const from = new Date(dateFrom + 'T00:00:00').getTime();
+      list = list.filter(t => new Date(t.createdAt).getTime() >= from);
+    }
+    if (dateTo) {
+      const to = new Date(dateTo + 'T23:59:59').getTime();
+      list = list.filter(t => new Date(t.createdAt).getTime() <= to);
+    }
+    // Search by name, email, or phone
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter(t => {
+        const name = (t.client?.customerName || '').toLowerCase();
+        const email = (t.client?.email || '').toLowerCase();
+        const phone = (t.client?.phone || '').toLowerCase();
+        return name.includes(q) || email.includes(q) || phone.includes(q);
+      });
+    }
+    // Sort: newest first (from new to old)
+    return [...list].sort((a, b) => {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [currentList, stageFilter, slaFilter, searchQuery, dateFrom, dateTo]);
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -228,6 +260,96 @@ export function StaffDashboard() {
         })}
       </div>
 
+      {/* Search & SLA Filter & Date Filter */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+          {/* Search */}
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="بحث بالاسم أو الإيميل أو رقم الجوال..."
+              className="w-full pr-10 pl-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-all duration-200"
+            />
+          </div>
+          {/* Date Filter Toggle */}
+          <button
+            onClick={() => setShowDateFilter(!showDateFilter)}
+            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold border transition-all duration-200 shrink-0 ${
+              (dateFrom || dateTo)
+                ? 'bg-indigo-50 border-indigo-300 text-indigo-700 shadow-sm'
+                : showDateFilter
+                  ? 'bg-white border-indigo-300 text-indigo-600'
+                  : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+            }`}
+          >
+            <CalendarDays className="w-4 h-4" />
+            <span>فلتر التاريخ</span>
+            {(dateFrom || dateTo) && (
+              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+            )}
+          </button>
+          {/* SLA Filter */}
+          <div className="flex gap-1.5 bg-slate-100 p-1 rounded-xl shrink-0">
+            {([
+              { key: 'ALL', label: 'الكل' },
+              { key: 'BREACHED', label: '⚠️ تجاوز SLA' },
+              { key: 'OK', label: '✅ ضمن SLA' },
+            ] as const).map(f => (
+              <button key={f.key} onClick={() => setSlaFilter(f.key)}
+                className={`px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all duration-200 whitespace-nowrap ${
+                  slaFilter === f.key
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Date Range Filter Panel */}
+        {showDateFilter && (
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 bg-white border border-slate-200 rounded-xl p-3 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex-1 space-y-1">
+              <label className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+                <CalendarDays className="w-3 h-3" /> من تاريخ
+              </label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={e => setDateFrom(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-all"
+                dir="ltr"
+              />
+            </div>
+            <div className="flex-1 space-y-1">
+              <label className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+                <CalendarDays className="w-3 h-3" /> إلى تاريخ
+              </label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={e => setDateTo(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-all"
+                dir="ltr"
+              />
+            </div>
+            {(dateFrom || dateTo) && (
+              <button
+                onClick={() => { setDateFrom(''); setDateTo(''); }}
+                className="flex items-center justify-center gap-1.5 px-4 py-2 bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 rounded-lg text-xs font-bold transition-all shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+                مسح الفلتر
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Table */}
       {visibleTickets.length === 0 ? (
         <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-100 p-10 sm:p-16 text-center">
@@ -243,6 +365,7 @@ export function StaffDashboard() {
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                   <th className="px-4 py-3 text-right">رقم الطلب</th>
+                  <th className="px-4 py-3 text-right">التاريخ والوقت</th>
                   <th className="px-4 py-3 text-right">العميل</th>
                   <th className="px-4 py-3 text-right">المجال</th>
                   <th className="px-4 py-3 text-right">المرحلة</th>
@@ -262,8 +385,47 @@ export function StaffDashboard() {
                         <span className="font-mono text-[11px] text-slate-400">#{ticket.id.slice(0,8)}</span>
                       </td>
                       <td className="px-4 py-3.5">
-                        <p className="font-bold text-slate-800 text-sm">{ticket.client?.customerName}</p>
-                        <p className="text-[10px] text-slate-400">{ticket.client?.email}</p>
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                          <Clock className="w-3 h-3 text-slate-400" />
+                          <div>
+                            <p className="font-medium">{new Date(ticket.createdAt).toLocaleDateString('ar-SA', { year: 'numeric', month: 'short', day: 'numeric' })}</p>
+                            <p className="text-[10px] text-slate-400">{new Date(ticket.createdAt).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-2">
+                          <div>
+                            <p className="font-bold text-slate-800 text-sm">{ticket.client?.customerName}</p>
+                            <p className="text-[10px] text-slate-400">{ticket.client?.email}</p>
+                          </div>
+                          {ticket.isNewClient && ticket.stage === 'INTAKE' && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 text-amber-700 rounded-md text-[9px] font-bold whitespace-nowrap">
+                              <Sparkles className="w-2.5 h-2.5" /> عميل جديد
+                            </span>
+                          )}
+                          {(() => {
+                            const isNewForUser = !ticket.staffAcceptedAt && (() => {
+                              if (['ADMIN', 'ACCOUNT_MANAGER'].includes(user?.role || '')) return true;
+                              switch (ticket.stage) {
+                                case 'INTAKE': return ticket.accountManagerId === user?.id;
+                                case 'SEO_STORE_SETUP': return ticket.seoSpecialistId === user?.id || ticket.assignedSeoId === user?.id;
+                                case 'DESIGN': return ticket.designerId === user?.id;
+                                case 'DEVELOPMENT': return ticket.developerId === user?.id;
+                                case 'SEO_FINAL': return ticket.seoSpecialistId === user?.id || ticket.assignedSeoId === user?.id;
+                                default: return false;
+                              }
+                            })();
+                            if (isNewForUser) {
+                              return (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 text-blue-700 rounded-md text-[9px] font-bold whitespace-nowrap">
+                                  جديد
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </div>
                       </td>
                       <td className="px-4 py-3.5">
                         <span className="text-xs font-medium text-slate-600">{ticket.client?.industry}</span>

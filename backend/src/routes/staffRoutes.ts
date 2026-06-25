@@ -82,13 +82,13 @@ router.get('/tickets', authenticateToken, async (req: AuthRequest, res) => {
       case 'ACCOUNT_MANAGER':
         break;
       case 'DESIGNER':
-        whereClause = { ...whereClause, OR: [{ designerId: userId }, { stage: 'DESIGN' }] };
+        whereClause = { ...whereClause, OR: [{ designerId: userId }, { assignedDesignerId: userId }] };
         break;
       case 'DEVELOPER':
-        whereClause = { ...whereClause, OR: [{ developerId: userId }, { stage: 'DEVELOPMENT' }] };
+        whereClause = { ...whereClause, developerId: userId };
         break;
       case 'SEO':
-        whereClause = { ...whereClause };
+        whereClause = { ...whereClause, OR: [{ seoSpecialistId: userId }, { assignedSeoId: userId }] };
         break;
       default:
         return res.json([]);
@@ -99,6 +99,18 @@ router.get('/tickets', authenticateToken, async (req: AuthRequest, res) => {
       include: FULL_TICKET_INCLUDE,
       orderBy: { createdAt: 'desc' },
     });
+
+    // Count total tickets per clientId to detect first-time customers
+    const clientIds = [...new Set(tickets.map(t => t.clientId).filter(Boolean))];
+    const clientTicketCounts: Record<string, number> = {};
+    if (clientIds.length > 0) {
+      const counts = await prisma.ticket.groupBy({
+        by: ['clientId'],
+        where: { clientId: { in: clientIds } },
+        _count: { id: true },
+      });
+      counts.forEach(c => { clientTicketCounts[c.clientId] = c._count.id; });
+    }
 
     const canDecrypt = ['ADMIN', 'DEVELOPER'].includes(role);
 
@@ -120,6 +132,8 @@ router.get('/tickets', authenticateToken, async (req: AuthRequest, res) => {
         slaBreached: isCustomSlaBreached(t),
         slaRemainingHours: getCustomSlaRemaining(t),
         stageLabel: STAGE_LABELS[t.stage as keyof typeof STAGE_LABELS] || t.stage,
+        isNewClient: (clientTicketCounts[t.clientId] || 0) <= 1,
+        clientTicketCount: clientTicketCounts[t.clientId] || 0,
       };
     });
 
@@ -456,7 +470,7 @@ router.get(
 router.put(
   '/:id/toggle-status',
   authenticateToken,
-  requireRole('ADMIN'),
+  requireRole('ADMIN', 'ACCOUNT_MANAGER'),
   async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
@@ -465,6 +479,10 @@ router.put(
       }
       const user = await prisma.user.findUnique({ where: { id } });
       if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
+      // AM cannot toggle ADMIN accounts
+      if (req.user!.role === 'ACCOUNT_MANAGER' && user.role === 'ADMIN') {
+        return res.status(403).json({ error: 'لا يمكنك تعديل حسابات المدراء' });
+      }
 
       const updated = await prisma.user.update({
         where: { id },
@@ -484,7 +502,7 @@ router.put(
 router.delete(
   '/:id/hard',
   authenticateToken,
-  requireRole('ADMIN'),
+  requireRole('ADMIN', 'ACCOUNT_MANAGER'),
   async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
@@ -493,6 +511,10 @@ router.delete(
       }
       const user = await prisma.user.findUnique({ where: { id } });
       if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
+      // AM cannot delete ADMIN accounts
+      if (req.user!.role === 'ACCOUNT_MANAGER' && user.role === 'ADMIN') {
+        return res.status(403).json({ error: 'لا يمكنك حذف حسابات المدراء' });
+      }
 
       // Nullify ticket relations so DB doesn't crash
       await prisma.ticket.updateMany({ where: { accountManagerId: id }, data: { accountManagerId: null } });
@@ -702,7 +724,7 @@ router.delete(
 router.post(
   '/create',
   authenticateToken,
-  requireRole('ADMIN'),
+  requireRole('ADMIN', 'ACCOUNT_MANAGER'),
   async (req: AuthRequest, res) => {
     try {
       const { name, email, role } = req.body;
@@ -735,13 +757,17 @@ router.post(
 router.put(
   '/:id/update',
   authenticateToken,
-  requireRole('ADMIN'),
+  requireRole('ADMIN', 'ACCOUNT_MANAGER'),
   async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
       const { name, role } = req.body;
       const user = await prisma.user.findUnique({ where: { id } });
       if (!user) return res.status(404).json({ error: 'الموظف غير موجود' });
+      // AM cannot edit ADMIN accounts
+      if (req.user!.role === 'ACCOUNT_MANAGER' && user.role === 'ADMIN') {
+        return res.status(403).json({ error: 'لا يمكنك تعديل حسابات المدراء' });
+      }
       const data: any = {};
       if (name?.trim()) data.name = name.trim();
       if (role) {
@@ -764,12 +790,16 @@ router.put(
 router.put(
   '/:id/reset-password',
   authenticateToken,
-  requireRole('ADMIN'),
+  requireRole('ADMIN', 'ACCOUNT_MANAGER'),
   async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
       const user = await prisma.user.findUnique({ where: { id } });
       if (!user) return res.status(404).json({ error: 'الموظف غير موجود' });
+      // AM cannot reset ADMIN passwords
+      if (req.user!.role === 'ACCOUNT_MANAGER' && user.role === 'ADMIN') {
+        return res.status(403).json({ error: 'لا يمكنك تعديل حسابات المدراء' });
+      }
       const passwordHash = await bcrypt.hash('123456', 10);
       await prisma.user.update({ where: { id }, data: { passwordHash } });
       res.json({ message: `تم إعادة تعيين كلمة مرور ${user.name}` });

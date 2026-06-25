@@ -1,16 +1,13 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { API_URL } from '../../config/api';
 import { normalizeUrl } from '../../utils/normalizeUrl';
-import { CheckCircle2, AlertCircle, ExternalLink, FileText, Clock, Send, Image as ImageIcon, Link2 } from 'lucide-react';
+import { CheckCircle2, AlertCircle, ExternalLink, FileText, Clock, Send, Image as ImageIcon, Link2, Lock, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '../ui/Toast';
 import { ensureUrl } from '../../utils/ensureUrl';
 
 const API = API_URL;
 const DEV_TASKS = [
   { key: 'designApplied', label: 'تطبيق التصميم المعتمد على المتجر' },
-  { key: 'pagesSetup', label: 'ضبط الصفحات والأقسام' },
-  { key: 'uiTested', label: 'اختبار الواجهة والتأكد من عملها بشكل صحيح' },
-  { key: 'deliveredToSeo', label: 'تسليم العمل لفريق SEO' },
 ];
 
 const REVIEW_BADGES: Record<string, { label: string; cls: string }> = {
@@ -36,18 +33,29 @@ export function DevSection({ ticket, headers, userRole, onRefresh, setErrorModal
   const [showRevForm, setShowRevForm] = useState(false);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [submittingToSeo, setSubmittingToSeo] = useState(false);
+  const [resubmitBrief, setResubmitBrief] = useState('');
+  const [storeCreds, setStoreCreds] = useState<{ email: string; password: string } | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { showToast } = useToast();
 
   // ─── Role helpers ───────────────────────────────────────────────────
   const isDeveloper = userRole === 'DEVELOPER';
   const isSEO = userRole === 'SEO';
+  const canSeeCredentials = ticket.showCredentialsToDev === true || ['ADMIN', 'ACCOUNT_MANAGER', 'SEO'].includes(userRole);
 
   useEffect(() => {
     fetch(`${API}/api/tickets/${ticket.id}/dev-checklist`, { headers })
-      .then(r => r.json()).then(d => { if (d && !d.error) setChecklist(d); }).catch(() => {});
+      .then(r => r.json()).then(d => { if (d && !d.error) setChecklist(d); }).catch(() => { });
     fetch(`${API}/api/tickets/${ticket.id}/design-delivery`, { headers })
-      .then(r => r.json()).then(d => { if (d && d.id) setDelivery(d); }).catch(() => {});
+      .then(r => r.json()).then(d => { if (d && d.id) setDelivery(d); }).catch(() => { });
+    // Fetch store credentials if allowed
+    if (canSeeCredentials) {
+      fetch(`${API}/api/tickets/${ticket.id}/seo-checklist`, { headers })
+        .then(r => r.json()).then(d => {
+          if (d && !d.error) setStoreCreds({ email: d.newGmail || d.storeEmail || '', password: d.newGmailPassword || d.storePassword || '' });
+        }).catch(() => { });
+    }
   }, [ticket.id]);
 
   const saveChecklist = useCallback((data: any) => {
@@ -60,7 +68,7 @@ export function DevSection({ ticket, headers, userRole, onRefresh, setErrorModal
           body: JSON.stringify(data)
         });
         if (res.ok) { const saved = await res.json(); setChecklist(saved); setSaveOk(true); setTimeout(() => setSaveOk(false), 2000); }
-      } catch {} finally { setSaving(false); }
+      } catch { } finally { setSaving(false); }
     }, 500);
   }, [ticket.id, headers]);
 
@@ -82,6 +90,26 @@ export function DevSection({ ticket, headers, userRole, onRefresh, setErrorModal
         const saved = await res.json();
         setChecklist(saved);
         showToast('تم تسليم العمل لفريق SEO بنجاح ✅');
+      } else {
+        showToast('فشل التسليم، حاول مرة أخرى', 'error');
+      }
+    } catch { showToast('تعذر الاتصال بالخادم', 'error'); }
+    finally { setSubmittingToSeo(false); }
+  };
+
+  // Developer resubmits to SEO (after task was returned)
+  const resubmitToSeo = async () => {
+    setSubmittingToSeo(true);
+    try {
+      const res = await fetch(`${API}/api/tickets/${ticket.id}/dev-checklist/resubmit`, {
+        method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ devBriefToSeo: resubmitBrief.trim() })
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setChecklist(saved);
+        setResubmitBrief('');
+        showToast('تم إعادة تسليم العمل لفريق SEO بنجاح ✅');
       } else {
         showToast('فشل التسليم، حاول مرة أخرى', 'error');
       }
@@ -122,8 +150,11 @@ export function DevSection({ ticket, headers, userRole, onRefresh, setErrorModal
   // Developer can edit checkboxes only when not yet approved and not submitted (or in revision)
   const canDevEdit = isDeveloper && reviewStatus !== 'APPROVED' && (!isSubmitted || reviewStatus === 'REVISION');
 
+  // DEBUG - remove later
+  console.log('[DevSection DEBUG]', { userRole, isDeveloper, reviewStatus, isSubmitted, allDone, checklist: checklist?.seoReviewStatus });
+
   let imgs: string[] = [];
-  try { imgs = JSON.parse(delivery?.images || '[]'); } catch {}
+  try { imgs = JSON.parse(delivery?.images || '[]'); } catch { }
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -132,6 +163,30 @@ export function DevSection({ ticket, headers, userRole, onRefresh, setErrorModal
         <div className="bg-blue-50 rounded-2xl border border-blue-200 p-4">
           <h4 className="text-xs font-bold text-blue-700 mb-2 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> بريف المطور</h4>
           <p className="text-xs text-blue-900 whitespace-pre-wrap leading-relaxed">{ticket.devBrief}</p>
+        </div>
+      )}
+
+      {/* Store Credentials — only if allowed */}
+      {canSeeCredentials && storeCreds && (storeCreds.email || storeCreds.password) && (
+        <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-2">
+          <h4 className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" /> بيانات دخول المتجر</h4>
+          <div className="space-y-1.5 text-xs">
+            {storeCreds.email && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400 w-20 shrink-0">إيميل:</span>
+                <span className="font-mono text-slate-700">{storeCreds.email}</span>
+              </div>
+            )}
+            {storeCreds.password && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400 w-20 shrink-0">كلمة المرور:</span>
+                <span className="font-mono text-slate-700">{showPassword ? storeCreds.password : '••••••••'}</span>
+                <button onClick={() => setShowPassword(!showPassword)} className="p-1 hover:bg-slate-200 rounded-lg transition-colors">
+                  {showPassword ? <EyeOff className="w-3.5 h-3.5 text-slate-400" /> : <Eye className="w-3.5 h-3.5 text-slate-400" />}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -256,6 +311,50 @@ export function DevSection({ ticket, headers, userRole, onRefresh, setErrorModal
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
           <p className="text-xs font-bold text-emerald-800">تم اعتماد عمل المطور من فريق SEO ✅</p>
+        </div>
+      )}
+
+      {/* Developer's brief to SEO — shown when submitted */}
+      {checklist?.devBriefToSeo && reviewStatus === 'PENDING' && isSubmitted && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-start gap-2">
+          <FileText className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[10px] font-bold text-blue-500 mb-1">بريف المطور لفريق SEO</p>
+            <p className="text-xs text-blue-900 whitespace-pre-wrap leading-relaxed">{checklist.devBriefToSeo}</p>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          Developer: Resubmit to SEO — when task was previously approved
+          or SEO requested revision
+         ═══════════════════════════════════════════════════════════════ */}
+      {isDeveloper && (reviewStatus === 'APPROVED' || reviewStatus === 'REVISION') && (
+        <div className="bg-indigo-50 rounded-2xl border border-indigo-200 p-4 space-y-3">
+          <div className="flex items-start gap-2">
+            <Send className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-bold text-indigo-800">الطلب رجع لك — اكتب بريف وأعد التسليم لفريق SEO</p>
+              <p className="text-[10px] text-indigo-600 mt-0.5">أضف ملاحظاتك عن التعديلات أو التحديثات اللي عملتها</p>
+            </div>
+          </div>
+          <textarea
+            value={resubmitBrief}
+            onChange={e => setResubmitBrief(e.target.value)}
+            placeholder="اكتب بريف المطور هنا... (ملاحظات عن التعديلات المنفذة)"
+            rows={3}
+            className="w-full text-xs border border-indigo-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
+          />
+          <button
+            onClick={resubmitToSeo}
+            disabled={submittingToSeo}
+            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
+          >
+            {submittingToSeo
+              ? <><Clock className="w-4 h-4 animate-spin" /> جاري إعادة التسليم...</>
+              : <><Send className="w-4 h-4" /> إعادة تسليم العمل لفريق SEO</>
+            }
+          </button>
         </div>
       )}
     </div>
