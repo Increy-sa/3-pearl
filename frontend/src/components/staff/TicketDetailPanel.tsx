@@ -420,6 +420,200 @@ function IntakeSection({ ticket, headers, staff, userRole: _userRole, onRefresh,
   );
 }
 
+// ═══════ Staff Data Requests Section — Cross-Stage (shows data requests on any stage) ═══════
+function StaffDataRequestsSection({ ticket, headers, onRefresh }: {
+  ticket: any; headers: Record<string, string>; onRefresh: () => void;
+}) {
+  const [dataRequests, setDataRequests] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newMessage, setNewMessage] = useState('');
+  const [showReplyForm, setShowReplyForm] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [isResolving, setIsResolving] = useState(false);
+  const { showToast } = useToast();
+
+  const ROLE_NAMES: Record<string, string> = {
+    ACCOUNT_MANAGER: 'مدير الحساب',
+    SEO: 'فريق SEO',
+    ADMIN: 'مدير النظام',
+    DESIGNER: 'المصمم',
+    DEVELOPER: 'المطور',
+    CUSTOMER: 'العميل',
+  };
+
+  const fetchRequests = () => {
+    fetch(`${API}/api/tickets/${ticket.id}/data-requests`, { headers })
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setDataRequests(data); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { fetchRequests(); }, [ticket.id]);
+
+  const sendNewRequest = async () => {
+    if (!newMessage.trim()) return;
+    setIsSending(true);
+    try {
+      const res = await fetch(`${API}/api/tickets/${ticket.id}/data-request`, {
+        method: 'POST', headers, body: JSON.stringify({ message: newMessage }),
+      });
+      if (res.ok) {
+        const dr = await res.json();
+        setDataRequests(prev => [...prev, dr]);
+        setNewMessage('');
+        setShowReplyForm(false);
+        showToast('تم إرسال طلب البيانات للعميل ✅');
+      }
+    } catch {}
+    finally { setIsSending(false); }
+  };
+
+  const resolveAll = async () => {
+    setIsResolving(true);
+    try {
+      const res = await fetch(`${API}/api/tickets/${ticket.id}/approve-intake`, {
+        method: 'PUT', headers,
+      });
+      if (res.ok) {
+        showToast('تم اعتماد البيانات وإغلاق المحادثة ✅');
+        fetchRequests();
+        onRefresh();
+      }
+    } catch {}
+    finally { setIsResolving(false); }
+  };
+
+  if (loading || dataRequests.length === 0) return null;
+
+  // Hide section if all staff requests are resolved (conversation closed)
+  const allStaffResolved = dataRequests.filter((dr: any) => dr.fromRole !== 'CUSTOMER').every((dr: any) => dr.isResolved);
+  if (allStaffResolved) return null;
+
+  // Smart status: check if a staff message has a customer reply AFTER it chronologically
+  const staffMessageHasReply = (index: number): boolean => {
+    for (let i = index + 1; i < dataRequests.length; i++) {
+      if (dataRequests[i].fromRole === 'CUSTOMER') return true;
+    }
+    return false;
+  };
+
+  // Header badge: last message is from staff with no customer reply after it = waiting
+  const lastMsg = dataRequests[dataRequests.length - 1];
+  const isWaitingForCustomer = lastMsg && lastMsg.fromRole !== 'CUSTOMER';
+  const hasCustomerResponse = dataRequests.some((dr: any) => dr.fromRole === 'CUSTOMER');
+  const allStaffAnswered = !isWaitingForCustomer;
+
+  return (
+    <section className="space-y-3">
+      <h3 className="text-xs font-bold text-amber-600 uppercase tracking-wider flex items-center gap-2">
+        <MessageSquare className="w-3.5 h-3.5" /> طلبات البيانات الإضافية
+        {isWaitingForCustomer ? (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full animate-pulse">
+            <Clock className="w-3 h-3" /> بانتظار رد العميل
+          </span>
+        ) : allStaffAnswered && dataRequests.length > 0 ? (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+            <CheckCircle2 className="w-3 h-3" /> العميل ردّ
+          </span>
+        ) : null}
+      </h3>
+      <div className="bg-amber-50/50 rounded-2xl border border-amber-200 p-4 space-y-3">
+        {/* Chat history */}
+        <div className="max-h-72 overflow-y-auto space-y-2 p-3 bg-white rounded-xl border border-slate-100">
+          {dataRequests.map((dr: any, idx: number) => {
+            const isStaff = dr.fromRole !== 'CUSTOMER';
+            const isCustomer = dr.fromRole === 'CUSTOMER';
+            const hasReply = isStaff && staffMessageHasReply(idx);
+            return (
+              <div key={dr.id} className={`flex ${isStaff ? 'justify-start' : 'justify-end'}`}>
+                <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${
+                  isStaff
+                    ? 'bg-blue-50 border border-blue-100 text-blue-900'
+                    : 'bg-emerald-50 border border-emerald-100 text-emerald-900'
+                }`}>
+                  <p className="text-xs leading-relaxed whitespace-pre-wrap">{dr.message}</p>
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    <span className="text-[9px] text-slate-400">
+                      {ROLE_NAMES[dr.fromRole] || dr.fromRole}
+                    </span>
+                    <span className="text-[9px] text-slate-400">{fmtDate(dr.createdAt)}</span>
+                    {isStaff && (
+                      (dr.isResolved || hasReply) ? (
+                        <span className="text-[9px] text-emerald-600 font-bold flex items-center gap-0.5">
+                          <CheckCircle2 className="w-2.5 h-2.5" /> تم الرد ✅
+                        </span>
+                      ) : (
+                        <span className="text-[9px] text-amber-600 font-bold flex items-center gap-0.5">
+                          <Clock className="w-2.5 h-2.5" /> بانتظار الرد
+                        </span>
+                      )
+                    )}
+                    {isCustomer && (
+                      <span className="text-[9px] text-emerald-600 font-bold flex items-center gap-0.5">
+                        <CheckCircle2 className="w-2.5 h-2.5" /> رد العميل
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Reply form */}
+        {showReplyForm ? (
+          <div className="space-y-2">
+            <textarea
+              value={newMessage}
+              onChange={e => setNewMessage(e.target.value)}
+              placeholder="اكتب ما تحتاجه من العميل..."
+              rows={3}
+              className="w-full text-xs border border-amber-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none"
+            />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={sendNewRequest}
+                disabled={isSending || !newMessage.trim()}
+                className="px-4 py-2 bg-amber-600 text-white rounded-xl text-xs font-bold hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" />
+                {isSending ? 'جاري الإرسال...' : 'إرسال الطلب'}
+              </button>
+              <button
+                onClick={() => { setShowReplyForm(false); setNewMessage(''); }}
+                className="px-3 py-2 text-slate-500 hover:text-slate-700 text-xs font-bold cursor-pointer"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setShowReplyForm(true)}
+              className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <MessageSquare className="w-3.5 h-3.5" /> طلب بيانات إضافية
+            </button>
+            {hasCustomerResponse && allStaffAnswered && (
+              <button
+                onClick={resolveAll}
+                disabled={isResolving}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                {isResolving ? 'جاري الاعتماد...' : 'اعتماد وإغلاق المحادثة'}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+
 // ── Generic Collapsible Section ──
 function CollapsibleSection({ title, subtitle, defaultOpen = false, children, color = 'slate' }: {
   title: string; subtitle?: string; defaultOpen?: boolean; children: React.ReactNode; color?: string;
@@ -819,9 +1013,10 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
             return <IntakeSection ticket={ticket} headers={headers} staff={staff} userRole={userRole} onRefresh={onRefresh} setErrorModal={setErrorModal} />;
           })()}
 
-
-
-
+          {/* ══════════ DATA REQUESTS — All Stages (except INTAKE which has its own) ══════════ */}
+          {ticket.stage !== 'INTAKE' && ['ADMIN', 'ACCOUNT_MANAGER', 'SEO'].includes(userRole) && (
+            <StaffDataRequestsSection ticket={ticket} headers={headers} onRefresh={onRefresh} />
+          )}
 
           {/* Password Toggle */}
           {canAssign(userRole) && ticket.storeDetails && (
@@ -1368,12 +1563,6 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
             <div className="space-y-3">
               <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="أضف ملاحظاتك هنا..."
                 className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none" />
-              <div className="flex items-center gap-2">
-                <Link2 className="w-3.5 h-3.5 text-slate-400" />
-                <input value={assets} onChange={e => setAssets(e.target.value)} placeholder="رابط الملفات / التسليمات"
-                  className="flex-1 text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-              </div>
-              <button onClick={saveNotes} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors cursor-pointer">حفظ الملاحظات</button>
             </div>
           </CollapsibleSection>
 

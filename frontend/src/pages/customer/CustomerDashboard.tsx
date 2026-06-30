@@ -202,6 +202,145 @@ function IntakeCustomerSection({ ticketId, token }: { ticketId: string; token: s
   );
 }
 
+// ═══════ Data Requests — Cross-Stage (shows on any stage when there are unresolved requests) ═══════
+function DataRequestsGlobalSection({ ticketId, token, currentStage }: { ticketId: string; token: string; currentStage: string }) {
+  const [dataRequests, setDataRequests] = useState<any[]>([]);
+  const [responseText, setResponseText] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDataRequests = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/tickets/${ticketId}/data-requests`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) setDataRequests(await res.json());
+      } catch {}
+      finally { setLoading(false); }
+    };
+    fetchDataRequests();
+  }, [ticketId, token]);
+
+  const sendResponse = async () => {
+    if (!responseText.trim()) return;
+    setIsSending(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_URL}/api/tickets/${ticketId}/data-response`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ message: responseText }),
+      });
+      if (res.ok) {
+        const dr = await res.json();
+        setDataRequests(prev => [...prev, dr]);
+        setResponseText('');
+      } else {
+        const err = await res.json();
+        setError(err.error || 'فشل إرسال الرد');
+      }
+    } catch { setError('تعذر الاتصال بالخادم'); }
+    finally { setIsSending(false); }
+  };
+
+  if (loading) return null;
+
+  // For INTAKE stage, IntakeCustomerSection handles data requests — skip here
+  if (currentStage === 'INTAKE') return null;
+
+  // Only show if there are unresolved staff requests
+  const hasUnresolvedStaffRequest = dataRequests.some((dr: any) => dr.fromRole !== 'CUSTOMER' && !dr.isResolved);
+  if (!hasUnresolvedStaffRequest) return null;
+
+  const getRoleName = (role: string) => {
+    switch (role) {
+      case 'ACCOUNT_MANAGER': return 'مدير الحساب';
+      case 'SEO': return 'فريق SEO';
+      case 'ADMIN': return 'مدير النظام';
+      case 'DESIGNER': return 'المصمم';
+      case 'DEVELOPER': return 'المطور';
+      case 'CUSTOMER': return 'أنت';
+      default: return 'فريق العمل';
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Alert banner */}
+      <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 sm:p-6 flex items-start gap-3">
+        <div className="w-10 h-10 bg-yellow-100 rounded-xl flex items-center justify-center shrink-0">
+          <AlertCircle className="w-5 h-5 text-yellow-600" />
+        </div>
+        <div>
+          <p className="text-sm font-bold text-yellow-800">📋 مطلوب منك بيانات إضافية</p>
+          <p className="text-xs text-yellow-700 mt-1">يرجى الاطلاع على الرسالة أدناه والرد عليها.</p>
+        </div>
+      </div>
+
+      {/* Chat history */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
+        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">سجل المحادثة</h4>
+        <div className="max-h-64 overflow-y-auto space-y-2">
+          {dataRequests.map((dr: any) => (
+            <div key={dr.id} className={`flex ${dr.fromRole === 'CUSTOMER' ? 'justify-start' : 'justify-end'}`}>
+              <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
+                dr.fromRole !== 'CUSTOMER'
+                  ? 'bg-blue-50 border border-blue-100 text-blue-900'
+                  : 'bg-slate-100 border border-slate-200 text-slate-800'
+              }`}>
+                <p className="text-xs leading-relaxed whitespace-pre-wrap">{dr.message}</p>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span className="text-[9px] text-slate-400">
+                    {getRoleName(dr.fromRole)}
+                  </span>
+                  <span className="text-[9px] text-slate-400">
+                    {new Date(dr.createdAt).toLocaleDateString('ar-SA')} - {new Date(dr.createdAt).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  {dr.isResolved && (
+                    <span className="text-[9px] text-emerald-600 font-bold flex items-center gap-0.5">
+                      <CheckCircle2 className="w-2.5 h-2.5" /> معتمد
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Response form */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
+        <textarea
+          value={responseText}
+          onChange={e => setResponseText(e.target.value)}
+          placeholder="اكتب ردك هنا..."
+          rows={3}
+          className="w-full text-sm border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"
+        />
+        {error && (
+          <div className="flex items-start gap-2 p-3 bg-red-50 rounded-xl border border-red-100">
+            <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-red-700">{error}</p>
+          </div>
+        )}
+        <button
+          onClick={sendResponse}
+          disabled={isSending || !responseText.trim()}
+          className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+        >
+          {isSending ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> جاري الإرسال...</>
+          ) : (
+            <><Send className="w-4 h-4" /> إرسال الرد</>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ═══════ SEO Customer Section ═══════
 function SeoCustomerSection({ ticket, token }: { ticket: any; token: string }) {
   const [proposal, setProposal] = useState<any>(null);
@@ -224,6 +363,9 @@ function SeoCustomerSection({ ticket, token }: { ticket: any; token: string }) {
   const submitReview = async (action: 'APPROVE' | 'REVISION') => {
     if (action === 'APPROVE' && !selectedDomain) {
       setError('يرجى اختيار دومين'); return;
+    }
+    if (action === 'REVISION' && !notes.trim()) {
+      setError('يرجى كتابة ملاحظاتك قبل طلب التعديل'); return;
     }
     setSending(true); setError(null);
     try {
@@ -329,7 +471,7 @@ function SeoCustomerSection({ ticket, token }: { ticket: any; token: string }) {
           className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50">
           {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />} اعتماد الدومين
         </button>
-        <button onClick={() => submitReview('REVISION')} disabled={sending}
+        <button onClick={() => submitReview('REVISION')} disabled={sending || !notes.trim()}
           className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer">
           <PenLine className="w-4 h-4" /> طلب تعديل
         </button>
@@ -1369,6 +1511,9 @@ export function CustomerDashboard() {
             {ticket.stage === 'DELIVERED' && (
               <DeliveredCustomerSection ticket={ticket} token={token!} />
             )}
+
+            {/* 📋 Data Requests — shows on any stage (except INTAKE which has its own) */}
+            <DataRequestsGlobalSection ticketId={ticket.id} token={token!} currentStage={ticket.stage} />
 
 
 

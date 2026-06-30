@@ -930,7 +930,7 @@ app.post('/api/tickets/:id/data-request', authenticateToken, async (req: AuthReq
     const { message } = req.body;
     const { role, userId } = req.user!;
 
-    if (!['ADMIN', 'ACCOUNT_MANAGER'].includes(role)) {
+    if (!['ADMIN', 'ACCOUNT_MANAGER', 'SEO'].includes(role)) {
       return res.status(403).json({ error: 'غير مصرح' });
     }
     if (!message?.trim()) {
@@ -943,7 +943,7 @@ app.post('/api/tickets/:id/data-request', authenticateToken, async (req: AuthReq
     const dataRequest = await prisma.dataRequest.create({
       data: {
         ticketId: id,
-        fromRole: 'ACCOUNT_MANAGER',
+        fromRole: role,
         message: message.trim(),
       }
     });
@@ -995,7 +995,7 @@ app.post('/api/tickets/:id/data-response', authenticateToken, async (req: AuthRe
       }
     });
 
-    // Notify AM and ADMIN
+    // Notify AM, ADMIN, and SEO
     await prisma.notification.createMany({
       data: [
         {
@@ -1011,6 +1011,13 @@ app.post('/api/tickets/:id/data-response', authenticateToken, async (req: AuthRe
           title: '💬 رد عميل على طلب بيانات',
           message: 'العميل أرسل رداً على طلب بيانات إضافية.',
           isPriority: false,
+        },
+        {
+          role: 'SEO',
+          ticketId: id,
+          title: '💬 رد العميل على طلب البيانات',
+          message: 'العميل أرسل رداً على طلب البيانات الإضافية.',
+          isPriority: true,
         }
       ]
     });
@@ -1052,7 +1059,7 @@ app.put('/api/tickets/:id/approve-intake', authenticateToken, async (req: AuthRe
     const { id } = req.params;
     const { role } = req.user!;
 
-    if (!['ADMIN', 'ACCOUNT_MANAGER'].includes(role)) {
+    if (!['ADMIN', 'ACCOUNT_MANAGER', 'SEO'].includes(role)) {
       return res.status(403).json({ error: 'غير مصرح' });
     }
 
@@ -1977,7 +1984,7 @@ app.put('/api/tickets/:id/flexible-transfer', authenticateToken, async (req: Aut
       }
       if (clientAction === 'REQUEST_DATA') {
         if (!clientMessage?.trim()) return res.status(400).json({ error: 'يجب كتابة رسالة الطلب' });
-        await prisma.dataRequest.create({ data: { ticketId: id, message: clientMessage.trim(), status: 'PENDING' } });
+        await prisma.dataRequest.create({ data: { ticketId: id, message: clientMessage.trim(), fromRole: role } });
         if (ticket.customerId) {
           await prisma.notification.create({ data: { userId: ticket.customerId, ticketId: id, title: '📋 طلب بيانات إضافية', message: clientMessage.trim(), isPriority: true } });
         }
