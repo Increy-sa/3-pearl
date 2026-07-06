@@ -77,11 +77,11 @@ app.get('/api/file-preview', (req, res) => {
     if (!fs.existsSync(filePath)) return res.status(404).send('File not found');
     const ext = path.extname(fileName).toLowerCase();
     // For images/PDFs, redirect to direct URL
-    if (['.pdf','.png','.jpg','.jpeg','.gif','.webp','.svg'].includes(ext)) {
+    if (['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'].includes(ext)) {
       return res.redirect(fileUrl);
     }
     // For Excel/CSV, convert to HTML
-    if (['.xlsx','.xls','.csv','.ods'].includes(ext)) {
+    if (['.xlsx', '.xls', '.csv', '.ods'].includes(ext)) {
       const workbook = XLSX.readFile(filePath);
       const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>معاينة الملف</title>
 <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',Tahoma,sans-serif;background:#f8fafc;padding:20px;color:#1e293b}
@@ -97,15 +97,15 @@ td{padding:8px 14px;text-align:right;font-size:12px;color:#334155;border-bottom:
 tr:hover td{background:#fffbeb}
 </style></head><body>
 <div class="header"><h1>📄 ${fileName}</h1><div class="info">${workbook.SheetNames.length} ورقة</div></div>
-<div class="tabs">${workbook.SheetNames.map((n: string, i: number) => `<div class="tab${i===0?' active':''}" onclick="document.querySelectorAll('.sheet,.tab').forEach(e=>e.classList.remove('active'));document.getElementById('s${i}').classList.add('active');this.classList.add('active')">${n}</div>`).join('')}</div>
+<div class="tabs">${workbook.SheetNames.map((n: string, i: number) => `<div class="tab${i === 0 ? ' active' : ''}" onclick="document.querySelectorAll('.sheet,.tab').forEach(e=>e.classList.remove('active'));document.getElementById('s${i}').classList.add('active');this.classList.add('active')">${n}</div>`).join('')}</div>
 ${workbook.SheetNames.map((name: string, i: number) => {
-  const sheet = workbook.Sheets[name];
-  const json = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
-  if (json.length === 0) return `<div id="s${i}" class="sheet${i===0?' active':''}"><p style="text-align:center;padding:40px;color:#94a3b8">ورقة فارغة</p></div>`;
-  const headers = json[0] || [];
-  const rows = json.slice(1);
-  return `<div id="s${i}" class="sheet${i===0?' active':''}"><table><thead><tr>${headers.map((h: any) => `<th>${h ?? ''}</th>`).join('')}</tr></thead><tbody>${rows.map((r: any[]) => `<tr>${headers.map((_: any, ci: number) => `<td>${r[ci] ?? ''}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
-}).join('')}
+        const sheet = workbook.Sheets[name];
+        const json = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
+        if (json.length === 0) return `<div id="s${i}" class="sheet${i === 0 ? ' active' : ''}"><p style="text-align:center;padding:40px;color:#94a3b8">ورقة فارغة</p></div>`;
+        const headers = json[0] || [];
+        const rows = json.slice(1);
+        return `<div id="s${i}" class="sheet${i === 0 ? ' active' : ''}"><table><thead><tr>${headers.map((h: any) => `<th>${h ?? ''}</th>`).join('')}</tr></thead><tbody>${rows.map((r: any[]) => `<tr>${headers.map((_: any, ci: number) => `<td>${r[ci] ?? ''}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+      }).join('')}
 </body></html>`;
       return res.type('html').send(html);
     }
@@ -177,7 +177,7 @@ app.post('/api/ai/generate-logo', async (req, res) => {
     const detectedBaseUrl = `${protocol}://${host}`;
     const envBaseUrl = process.env.BASE_URL || '';
     const baseUrl = (envBaseUrl && !envBaseUrl.includes('localhost')) ? envBaseUrl : detectedBaseUrl;
-    
+
     const logoUrl = await generateLogoSVG(brandName, industry, colors, baseUrl);
     res.json({ logoUrl });
   } catch (e) { res.status(500).json({ error: 'Logo failed' }); }
@@ -219,20 +219,22 @@ app.post('/api/tickets/create-with-ai', async (req, res) => {
         // Store / brand fields
         businessName,
         industry,
-        description:    description    || '',
+        description: description || '',
         targetAudience: targetAudience || 'الجميع',
 
         // Legal / identity fields (from LegalInfoForm via legalData spread)
-        customerName:    req.body.customerName    || undefined,
-        phone:           req.body.phone           || undefined,
-        nationalId:      req.body.nationalId      || undefined,
-        iban:            req.body.iban            || undefined,
-        hasDocument:     req.body.hasDocument     ?? undefined,
-        hasLegalDoc:     req.body.hasLegalDoc     ?? undefined,
+        customerName: req.body.customerName || undefined,
+        phone: req.body.phone || undefined,
+        nationalId: req.body.nationalId || undefined,
+        iban: req.body.iban || undefined,
+        hasDocument: req.body.hasDocument ?? undefined,
+        hasLegalDoc: req.body.hasLegalDoc ?? undefined,
         documentFileUrl: req.body.documentFileUrl || undefined,  // "yes" branch — uploaded file
-        nationalIdUrl:   req.body.nationalIdUrl   || undefined,  // "no" branch — ID photo
-        fullNameInId:    req.body.fullNameInId    || undefined,
-        absherPhone:     req.body.absherPhone     || undefined,
+        nationalIdUrl: req.body.nationalIdUrl || undefined,  // "no" branch — ID photo
+        fullNameInId: req.body.fullNameInId || undefined,
+        absherPhone: req.body.absherPhone || undefined,
+        idImageUrl: req.body.idImageUrl || undefined,  // صورة الهوية
+        ibanCertUrl: req.body.ibanCertUrl || undefined,  // شهادة الآيبان
 
       };
 
@@ -249,12 +251,12 @@ app.post('/api/tickets/create-with-ai', async (req, res) => {
         // Required fields must be explicit for Prisma's type checker
         const created = await prisma.clientInfo.create({
           data: {
-            customerName:  (cleanData.customerName  as string) || '',
-            email:         email as string,
-            businessName:  (cleanData.businessName  as string) || businessName,
-            industry:      (cleanData.industry      as string) || industry,
-            description:   (cleanData.description   as string) || '',
-            targetAudience:(cleanData.targetAudience as string) || 'الجميع',
+            customerName: (cleanData.customerName as string) || '',
+            email: email as string,
+            businessName: (cleanData.businessName as string) || businessName,
+            industry: (cleanData.industry as string) || industry,
+            description: (cleanData.description as string) || '',
+            targetAudience: (cleanData.targetAudience as string) || 'الجميع',
             ...cleanData,
           },
         });
@@ -269,7 +271,7 @@ app.post('/api/tickets/create-with-ai', async (req, res) => {
       if (user) {
         await prisma.ticket.updateMany({
           where: { customerId: user.id },
-          data:  { clientId: clientInfoId },
+          data: { clientId: clientInfoId },
         });
         console.log(`[create-with-ai] Ticket(s) re-linked to ClientInfo ${clientInfoId} for user ${user.id}`);
       }
@@ -329,8 +331,8 @@ app.post('/api/tickets/create-final', async (req, res) => {
     // Create or reuse user (handle duplicate email gracefully)
     let user = await prisma.user.findUnique({ where: { email: data.email } });
     if (!user) {
-      user = await prisma.user.create({ 
-        data: { email: data.email, name: data.customerName, role: "CUSTOMER" } 
+      user = await prisma.user.create({
+        data: { email: data.email, name: data.customerName, role: "CUSTOMER" }
       });
     }
 
@@ -345,57 +347,65 @@ app.post('/api/tickets/create-final', async (req, res) => {
 
     console.log('[create-final] RESOLVED:', { finalNeedsExtraction, finalHasLegalDoc, hasDocFile, hasExtractionData });
 
-    const client = await prisma.clientInfo.create({ data: {
-      customerName: data.customerName,
-      businessName: data.businessName,
-      industry: data.industry,
-      description: data.description || '',
-      targetAudience: data.targetAudience || 'الجميع',
-      email: data.email,
-      phone: data.phone || null,
-      nationalId: data.nationalId || null,
-      iban: data.iban || null,
-      hasLegalDoc: finalHasLegalDoc,
-      hasDocument: data.hasDocument === true || hasDocFile,
-      needsLegalExtraction: finalNeedsExtraction,
-      documentFileUrl: data.documentFileUrl || data.legalDocUrl || null,
-      legalDocUrl: data.documentFileUrl || data.legalDocUrl || null,
-      nationalIdUrl: data.nationalIdUrl || null,
-      fullNameInId: data.fullNameInId || null,
-      absherPhone: data.absherPhone || null,
-      docsApproved: false,
-    }});
+    const client = await prisma.clientInfo.create({
+      data: {
+        customerName: data.customerName,
+        businessName: data.businessName,
+        industry: data.industry,
+        description: data.description || '',
+        targetAudience: data.targetAudience || 'الجميع',
+        email: data.email,
+        phone: data.phone || null,
+        nationalId: data.nationalId || null,
+        iban: data.iban || null,
+        hasLegalDoc: finalHasLegalDoc,
+        hasDocument: data.hasDocument === true || hasDocFile,
+        needsLegalExtraction: finalNeedsExtraction,
+        documentFileUrl: data.documentFileUrl || data.legalDocUrl || null,
+        legalDocUrl: data.documentFileUrl || data.legalDocUrl || null,
+        nationalIdUrl: data.nationalIdUrl || null,
+        fullNameInId: data.fullNameInId || null,
+        absherPhone: data.absherPhone || null,
+        docsApproved: false,
+        idImageUrl: data.idImageUrl || null,
+        ibanCertUrl: data.ibanCertUrl || null,
+      }
+    });
 
 
 
     // Create ticket with AI proposal
-    const ticket = await prisma.ticket.create({ data: {
-      clientId: client.id,
-      customerId: user.id,
-      stage: 'INTAKE',
-      checklists: "[]",
-      aiProposal: { create: {
-        suggestedNames: "[]",
-        businessName: data.selectedName || data.businessName,
-        selectedName: data.selectedName || data.businessName,
-        brandVoice: data.brandVoice || '',
-        brandVision: data.brandVision || '',
-        brandDescription: data.brandDescription || '',
-        selectedColors: JSON.stringify(data.colorPalette || []),
-        industry: data.industry || '',
-        referenceLogos: JSON.stringify(data.referenceLogos || []),
-        generatedLogoUrl: data.generatedLogoUrl || null,
-        selectedLogoType: data.selectedLogoType || null,
-        selectedLogoTypeName: data.selectedLogoTypeName || null,
-      }}
-    }});
+    const ticket = await prisma.ticket.create({
+      data: {
+        clientId: client.id,
+        customerId: user.id,
+        stage: 'INTAKE',
+        checklists: "[]",
+        aiProposal: {
+          create: {
+            suggestedNames: "[]",
+            businessName: data.selectedName || data.businessName,
+            selectedName: data.selectedName || data.businessName,
+            brandVoice: data.brandVoice || '',
+            brandVision: data.brandVision || '',
+            brandDescription: data.brandDescription || '',
+            selectedColors: JSON.stringify(data.colorPalette || []),
+            industry: data.industry || '',
+            referenceLogos: JSON.stringify(data.referenceLogos || []),
+            generatedLogoUrl: data.generatedLogoUrl || null,
+            selectedLogoType: data.selectedLogoType || null,
+            selectedLogoTypeName: data.selectedLogoTypeName || null,
+          }
+        }
+      }
+    });
 
     const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ 
-      success: true, 
-      ticket, 
-      token, 
-      user: { id: user.id, email: user.email, role: user.role, name: user.name } 
+    res.json({
+      success: true,
+      ticket,
+      token,
+      user: { id: user.id, email: user.email, role: user.role, name: user.name }
     });
   } catch (e: any) {
     console.error('[create-final] Error:', e.message, e.code);
@@ -535,6 +545,49 @@ app.get('/api/customer/my-ticket', authenticateToken, async (req: AuthRequest, r
   });
   if (!ticket) return res.status(404).json({ error: 'Not found' });
   res.json(ticket);
+});
+
+// ════════════════════════════════════════════════════════════════
+// PATCH /api/customer/update-documents — Customer uploads ID image / IBAN cert
+// ════════════════════════════════════════════════════════════════
+app.patch('/api/customer/update-documents', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user!.userId;
+    const { idImageUrl, ibanCertUrl } = req.body;
+
+    // Find the ticket belonging to this customer
+    const ticket = await prisma.ticket.findFirst({
+      where: { customerId: userId },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!ticket) return res.status(404).json({ error: 'لا يوجد طلب مرتبط بحسابك' });
+
+    // Build update data — only set fields that are provided
+    const updateData: Record<string, any> = {};
+    if (idImageUrl !== undefined) updateData.idImageUrl = idImageUrl || null;
+    if (ibanCertUrl !== undefined) updateData.ibanCertUrl = ibanCertUrl || null;
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ error: 'لم يتم تقديم أي بيانات للتحديث' });
+    }
+
+    await prisma.clientInfo.update({
+      where: { id: ticket.clientId },
+      data: updateData,
+    });
+
+    // Return updated ticket with client info
+    const updated = await prisma.ticket.findFirst({
+      where: { customerId: userId },
+      include: { client: true, aiProposal: true, storeDetails: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(updated);
+  } catch (e: any) {
+    console.error('[update-documents] Error:', e.message);
+    res.status(500).json({ error: 'فشل تحديث الملفات' });
+  }
 });
 
 app.post('/api/customer/approve-design', authenticateToken, async (req: AuthRequest, res) => {
@@ -788,7 +841,7 @@ app.post('/api/developer/complete-work', authenticateToken, async (req: AuthRequ
         action: 'DEVELOPER_COMPLETED',
         details: JSON.stringify({ from: ticket.stage, to: 'PENDING_AM_REVIEW' })
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     res.json({ success: true, ticket: updated });
   } catch (error: any) {
@@ -848,9 +901,11 @@ app.post('/api/am/review-development', authenticateToken, async (req: AuthReques
       });
 
       await prisma.auditLog.create({
-        data: { ticketId, userId, action: 'AM_APPROVED_DELIVERED',
-          details: JSON.stringify({ to: 'DELIVERED', siteUrl }) }
-      }).catch(() => {});
+        data: {
+          ticketId, userId, action: 'AM_APPROVED_DELIVERED',
+          details: JSON.stringify({ to: 'DELIVERED', siteUrl })
+        }
+      }).catch(() => { });
 
       res.json({ success: true, ticket: updated });
 
@@ -892,9 +947,11 @@ app.post('/api/am/review-development', authenticateToken, async (req: AuthReques
       });
 
       await prisma.auditLog.create({
-        data: { ticketId, userId, action: 'AM_REQUESTED_REVISION',
-          details: JSON.stringify({ feedback, to: 'DEVELOPMENT_REVISION' }) }
-      }).catch(() => {});
+        data: {
+          ticketId, userId, action: 'AM_REQUESTED_REVISION',
+          details: JSON.stringify({ feedback, to: 'DEVELOPMENT_REVISION' })
+        }
+      }).catch(() => { });
 
       res.json({ success: true, ticket: updated });
     } else {
@@ -1514,7 +1571,7 @@ app.put('/api/tickets/:id/transfer-to-designer', authenticateToken, async (req: 
         action: 'STAGE_CHANGED',
         details: JSON.stringify({ from: 'SEO_STORE_SETUP', to: 'DESIGN', assignedDesignerId })
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     // Notify designer
     await prisma.notification.create({
@@ -1554,7 +1611,7 @@ app.put('/api/tickets/:id/design-delivery', authenticateToken, async (req: AuthR
     const { id } = req.params;
     const { role } = req.user!;
     if (role === 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
-    const { figmaLink, images } = req.body;
+    const { figmaLink, driveLink, images } = req.body;
     const imagesJson = Array.isArray(images) ? JSON.stringify(images) : images || '[]';
 
     const existing = await prisma.designDelivery.findFirst({
@@ -1563,11 +1620,11 @@ app.put('/api/tickets/:id/design-delivery', authenticateToken, async (req: AuthR
     let delivery;
     if (existing) {
       delivery = await prisma.designDelivery.update({
-        where: { id: existing.id }, data: { figmaLink, images: imagesJson }
+        where: { id: existing.id }, data: { figmaLink, driveLink, images: imagesJson }
       });
     } else {
       delivery = await prisma.designDelivery.create({
-        data: { ticketId: id, figmaLink, images: imagesJson }
+        data: { ticketId: id, figmaLink, driveLink, images: imagesJson }
       });
     }
     res.json(delivery);
@@ -1598,7 +1655,7 @@ app.put('/api/tickets/:id/design-delivery/send-to-seo', authenticateToken, async
     if (!existing) return res.status(404).json({ error: 'لا يوجد تسليم' });
     // Must have at least figmaLink OR images
     let imgs: string[] = [];
-    try { imgs = JSON.parse(existing.images || '[]'); } catch {}
+    try { imgs = JSON.parse(existing.images || '[]'); } catch { }
     if (!existing.figmaLink && imgs.length === 0) {
       return res.status(400).json({ error: 'يجب إضافة رابط Figma أو رفع صورة تصميم واحدة على الأقل' });
     }
@@ -1682,17 +1739,19 @@ app.put('/api/tickets/:id/design-delivery/client-review', authenticateToken, asy
     if (action === 'APPROVE') {
       // If multiple images exist, client must select one
       let imgs: string[] = [];
-      try { imgs = JSON.parse(existing.images || '[]'); } catch {}
+      try { imgs = JSON.parse(existing.images || '[]'); } catch { }
       if (imgs.length > 1 && !selectedImageUrl) {
         return res.status(400).json({ error: 'يجب اختيار تصميم واحد من التصاميم المتاحة قبل الاعتماد' });
       }
       const finalImage = selectedImageUrl || (imgs.length === 1 ? imgs[0] : null);
       // Keep only the approved image, remove the rest
-      const d = await prisma.designDelivery.update({ where: { id: existing.id }, data: {
-        status: 'CLIENT_APPROVED', isFinalized: true, clientNotes: notes || null,
-        selectedImageUrl: finalImage,
-        images: finalImage ? JSON.stringify([finalImage]) : existing.images,
-      } });
+      const d = await prisma.designDelivery.update({
+        where: { id: existing.id }, data: {
+          status: 'CLIENT_APPROVED', isFinalized: true, clientNotes: notes || null,
+          selectedImageUrl: finalImage,
+          images: finalImage ? JSON.stringify([finalImage]) : existing.images,
+        }
+      });
       await prisma.notification.create({ data: { role: 'ACCOUNT_MANAGER', ticketId: id, title: '✅ العميل اعتمد التصميم', message: selectedImageUrl ? `العميل اختار واعتمد تصميم محدد.` : 'العميل وافق على التصميم.', isPriority: true } });
       res.json(d);
     } else if (action === 'REVISION') {
@@ -1720,7 +1779,7 @@ app.put('/api/tickets/:id/transfer-to-dev', authenticateToken, async (req: AuthR
       data: { developerId, devBrief: devBrief?.trim() || null, stage: 'DEVELOPMENT', stageEnteredAt: new Date(), customSlaHours: customSlaHours ? parseInt(customSlaHours) : null },
       include: { client: true, aiProposal: true }
     });
-    await prisma.auditLog.create({ data: { ticketId: id, userId, action: 'STAGE_CHANGED', details: JSON.stringify({ from: 'DESIGN', to: 'DEVELOPMENT', developerId }) } }).catch(() => {});
+    await prisma.auditLog.create({ data: { ticketId: id, userId, action: 'STAGE_CHANGED', details: JSON.stringify({ from: 'DESIGN', to: 'DEVELOPMENT', developerId }) } }).catch(() => { });
     await prisma.notification.create({ data: { userId: developerId, ticketId: id, title: '🔧 مهمة تطوير جديدة', message: 'تم تحويل طلب جديد إليك. يرجى البدء بالعمل.', isPriority: true } });
     res.json(updated);
   } catch (error: any) { res.status(500).json({ error: error.message }); }
@@ -1802,7 +1861,7 @@ app.put('/api/tickets/:id/dev-checklist/resubmit', authenticateToken, async (req
           assigneeRole: seoUser?.role || 'SEO',
         })
       }
-    }).catch(() => {});
+    }).catch(() => { });
     // Notify SEO
     if (seoId) {
       await prisma.notification.create({
@@ -1851,7 +1910,7 @@ app.put('/api/tickets/:id/seo-final', authenticateToken, async (req: AuthRequest
     const { id } = req.params;
     const { role } = req.user!;
     if (role === 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
-    const allowed = ['paymentActivated','paymentTested','paymentGatewaysOk','shippingLinked','shippingZonesSet','shippingTested','seoHomePage','seoCategoriesPage','metaDescSet','finalInspection'];
+    const allowed = ['paymentActivated', 'paymentTested', 'paymentGatewaysOk', 'shippingLinked', 'shippingZonesSet', 'shippingTested', 'seoHomePage', 'seoCategoriesPage', 'metaDescSet', 'finalInspection'];
     const data: any = {};
     for (const k of allowed) { if (req.body[k] !== undefined) data[k] = req.body[k]; }
     const cl = await prisma.seoFinalChecklist.upsert({
@@ -1926,6 +1985,96 @@ app.put('/api/tickets/:id/seo-final/client-review', authenticateToken, async (re
 });
 
 // ز- التسليم النهائي
+// ══════════════════════════════════════════════════════════════
+// Final Review — Client reviews all project details before delivery
+// ══════════════════════════════════════════════════════════════
+app.get('/api/tickets/:id/final-review-summary', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const ticket = await prisma.ticket.findUnique({
+      where: { id },
+      include: {
+        client: true,
+        aiProposal: true,
+        storeDetails: true,
+        seoChecklist: true,
+        seoProposals: { orderBy: { createdAt: 'desc' }, take: 1 },
+        designDeliveries: { orderBy: { createdAt: 'desc' }, take: 1 },
+        productSupplierSelection: true,
+      }
+    });
+    if (!ticket) return res.status(404).json({ error: 'الطلب غير موجود' });
+
+    const delivery = ticket.designDeliveries?.[0];
+    const proposal = ticket.seoProposals?.[0];
+    let designImages: string[] = [];
+    try { designImages = JSON.parse(delivery?.images || '[]'); } catch {}
+
+    res.json({
+      // Client info
+      businessName: ticket.client?.businessName,
+      industry: ticket.client?.industry,
+      description: ticket.client?.description,
+      targetAudience: ticket.client?.targetAudience,
+      // Store
+      storeName: proposal?.selectedName || ticket.aiProposal?.selectedName,
+      domain: proposal?.selectedDomain || ticket.storeDetails?.domainName,
+      sallaStoreUrl: ticket.storeDetails?.sallaStoreUrl,
+      // Logo
+      approvedLogoUrl: ticket.aiProposal?.generatedLogoUrl,
+      selectedDesignUrl: delivery?.selectedImageUrl,
+      logoTypeName: ticket.aiProposal?.selectedLogoTypeName,
+      // Design
+      figmaLink: delivery?.figmaLink,
+      driveLink: delivery?.driveLink,
+      designImages,
+      // Supplier & Products
+      supplierName: ticket.productSupplierSelection?.selectedSupplierName,
+      productFileUrl: ticket.productSupplierSelection?.productFileUrl,
+      productLink: ticket.productSupplierSelection?.productLink,
+      // Review status
+      finalReviewStatus: ticket.finalReviewStatus,
+      finalReviewNotes: ticket.finalReviewNotes,
+    });
+  } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
+
+app.put('/api/tickets/:id/final-review', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.user!;
+    if (role !== 'CUSTOMER') return res.status(403).json({ error: 'فقط العميل يمكنه المراجعة' });
+    const { action, notes } = req.body;
+    const ticket = await prisma.ticket.findUnique({ where: { id } });
+    if (!ticket) return res.status(404).json({ error: 'الطلب غير موجود' });
+    if (ticket.finalReviewStatus !== 'SENT_TO_CLIENT') return res.status(400).json({ error: 'المراجعة غير متاحة حالياً' });
+
+    if (action === 'APPROVE') {
+      await prisma.ticket.update({ where: { id }, data: { finalReviewStatus: 'CLIENT_APPROVED', finalReviewNotes: notes?.trim() || null } });
+      // Notify AM & SEO
+      const notifyRoles = ['ADMIN', 'ACCOUNT_MANAGER', 'SEO'];
+      if (ticket.accountManagerId) {
+        await prisma.notification.create({ data: { userId: ticket.accountManagerId, ticketId: id, title: '✅ العميل اعتمد المراجعة النهائية', message: notes?.trim() || 'العميل وافق على جميع التفاصيل. يمكنك المتابعة للتسليم.', isPriority: true } }).catch(() => {});
+      }
+      if (ticket.seoSpecialistId) {
+        await prisma.notification.create({ data: { userId: ticket.seoSpecialistId, ticketId: id, title: '✅ العميل اعتمد المراجعة النهائية', message: 'العميل وافق على جميع التفاصيل.', isPriority: false } }).catch(() => {});
+      }
+      return res.json({ success: true, status: 'CLIENT_APPROVED' });
+    } else if (action === 'REVISION') {
+      if (!notes?.trim()) return res.status(400).json({ error: 'يجب كتابة ملاحظات التعديل' });
+      await prisma.ticket.update({ where: { id }, data: { finalReviewStatus: 'CLIENT_REVISION', finalReviewNotes: notes.trim() } });
+      if (ticket.accountManagerId) {
+        await prisma.notification.create({ data: { userId: ticket.accountManagerId, ticketId: id, title: '✏️ العميل يطلب تعديل قبل التسليم', message: notes.trim(), isPriority: true } }).catch(() => {});
+      }
+      if (ticket.seoSpecialistId) {
+        await prisma.notification.create({ data: { userId: ticket.seoSpecialistId, ticketId: id, title: '✏️ العميل يطلب تعديل قبل التسليم', message: notes.trim(), isPriority: true } }).catch(() => {});
+      }
+      return res.json({ success: true, status: 'CLIENT_REVISION' });
+    }
+    return res.status(400).json({ error: 'إجراء غير صالح' });
+  } catch (error: any) { res.status(500).json({ error: error.message }); }
+});
+
 app.put('/api/tickets/:id/final-delivery', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
@@ -1940,7 +2089,7 @@ app.put('/api/tickets/:id/final-delivery', authenticateToken, async (req: AuthRe
       data: { stage: 'DELIVERED', stageEnteredAt: new Date(), isDelivered: true, deliveredAt: new Date(), finalDeliveryNotes: notes || null },
       include: { client: true }
     });
-    await prisma.auditLog.create({ data: { ticketId: id, userId, action: 'STAGE_CHANGED', details: JSON.stringify({ from: 'SEO_FINAL', to: 'DELIVERED' }) } }).catch(() => {});
+    await prisma.auditLog.create({ data: { ticketId: id, userId, action: 'STAGE_CHANGED', details: JSON.stringify({ from: 'SEO_FINAL', to: 'DELIVERED' }) } }).catch(() => { });
     if (updated.customerId) {
       await prisma.notification.create({ data: { userId: updated.customerId, ticketId: id, title: '🎉 تم تسليم متجرك!', message: 'مبارك! تم تسليم متجرك بنجاح.', isPriority: true } });
     }
@@ -1996,11 +2145,11 @@ app.put('/api/tickets/:id/flexible-transfer', authenticateToken, async (req: Aut
         await prisma.ticket.update({ where: { id }, data: { accountManagerId: amId } });
         await prisma.notification.create({
           data: { userId: amId, ticketId: id, title: '📋 تم تعيينك كمدير حساب', message: amBrief?.trim() || 'تم تعيينك كمدير حساب لهذا الطلب.', isPriority: true }
-        }).catch(() => {});
+        }).catch(() => { });
         const { assigneeName: amName, assigneeRole: amRole, fromStage: amFromStage } = req.body;
         await prisma.auditLog.create({
           data: { ticketId: id, userId, action: 'ASSIGNED_AM', details: JSON.stringify({ assigneeId: amId, brief: amBrief?.trim(), assigneeName: amName, assigneeRole: amRole, from: amFromStage || ticket.stage, to: 'ACCOUNT_MANAGER' }) }
-        }).catch(() => {});
+        }).catch(() => { });
         return res.json({ success: true, action: 'ASSIGN_AM' });
       }
       if (clientAction === 'SHOW_SUPPLIERS') {
@@ -2022,6 +2171,13 @@ app.put('/api/tickets/:id/flexible-transfer', authenticateToken, async (req: Aut
           await prisma.notification.create({ data: { userId: ticket.customerId, ticketId: id, title: '📦 ملف المنتجات جاهز', message: clientMessage || 'تم إعداد ملف المنتجات لمتجرك. يرجى المراجعة والاعتماد.', isPriority: true } });
         }
         return res.json({ success: true, action: 'SHOW_PRODUCT_FILE' });
+      }
+      if (clientAction === 'SHOW_FINAL_REVIEW') {
+        await prisma.ticket.update({ where: { id }, data: { finalReviewStatus: 'SENT_TO_CLIENT', finalReviewNotes: null } });
+        if (ticket.customerId) {
+          await prisma.notification.create({ data: { userId: ticket.customerId, ticketId: id, title: '📋 مراجعة نهائية قبل التسليم', message: clientMessage || 'متجرك جاهز! يرجى مراجعة جميع التفاصيل والاعتماد النهائي.', isPriority: true } });
+        }
+        return res.json({ success: true, action: 'SHOW_FINAL_REVIEW' });
       }
       return res.status(400).json({ error: 'إجراء غير صالح' });
     }
@@ -2075,13 +2231,13 @@ app.put('/api/tickets/:id/flexible-transfer', authenticateToken, async (req: Aut
     const { assigneeName, assigneeRole, fromStage, toStage } = req.body;
     await prisma.auditLog.create({
       data: { ticketId: id, userId, action: 'FLEXIBLE_TRANSFER', details: JSON.stringify({ from: fromStage || ticket.stage, to: toStage || targetStage, brief: brief?.trim(), assigneeId, assigneeName, assigneeRole }) }
-    }).catch(() => {});
+    }).catch(() => { });
 
     // Notify assigned staff
     if (assigneeId) {
       await prisma.notification.create({
         data: { userId: assigneeId, ticketId: id, title: `📋 مهمة جديدة - ${STAGE_CONFIG_LABELS[targetStage] || targetStage}`, message: brief?.trim() || 'تم تعيينك على هذا الطلب.', isPriority: true }
-      }).catch(() => {});
+      }).catch(() => { });
     }
 
     res.json(updated);
@@ -2142,10 +2298,10 @@ app.put('/api/tickets/:id/stage', authenticateToken, async (req: AuthRequest, re
   }
 
   if (ticket.stage === 'DESIGN' &&
-      !['INTAKE', 'SEO_STORE_SETUP', 'DESIGN'].includes(stage)) {
+    !['INTAKE', 'SEO_STORE_SETUP', 'DESIGN'].includes(stage)) {
     const missing = [];
     if (!ticket.designLogoUrl) missing.push('شعار المتجر');
-    
+
     let banners: string[] = [];
     try { banners = JSON.parse(ticket.designBannersUrl || '[]'); } catch { banners = ticket.designBannersUrl ? [ticket.designBannersUrl] : []; }
     if (banners.length === 0) missing.push('البنرات');
@@ -2173,14 +2329,16 @@ app.put('/api/tickets/:id/stage', authenticateToken, async (req: AuthRequest, re
       action: 'STAGE_CHANGED',
       details: JSON.stringify({ from: ticket.stage, to: stage })
     }
-  }).catch(() => {});
+  }).catch(() => { });
 
   const targetRole = getRoleForStage(stage);
   if (targetRole) {
-    await prisma.notification.create({ data: {
-      role: targetRole as string, ticketId: id, title: 'New Task',
-      message: `Ticket moved to ${stage}`, isPriority: true
-    }});
+    await prisma.notification.create({
+      data: {
+        role: targetRole as string, ticketId: id, title: 'New Task',
+        message: `Ticket moved to ${stage}`, isPriority: true
+      }
+    });
   }
   res.json(updated);
 });
@@ -2224,7 +2382,7 @@ app.put('/api/tickets/:id/emergency-transfer', authenticateToken, async (req: Au
         action: 'EMERGENCY_TRANSFER',
         details: JSON.stringify({ from: ticket.stage, to: stage, reason: reason.trim() })
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     res.json(updated);
   } catch (e: any) {
@@ -2274,9 +2432,11 @@ app.get('/api/admin/staff', authenticateToken, async (req: AuthRequest, res) => 
 app.post('/api/admin/staff', authenticateToken, async (req: AuthRequest, res) => {
   if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'غير مصرح' });
   const { name, email, role, password } = req.body;
-  const user = await prisma.user.create({ data: {
-    name, email, role, passwordHash: password ? await bcrypt.hash(password, 10) : null
-  }});
+  const user = await prisma.user.create({
+    data: {
+      name, email, role, passwordHash: password ? await bcrypt.hash(password, 10) : null
+    }
+  });
   res.json(user);
 });
 
@@ -2322,18 +2482,18 @@ app.post('/api/tickets/save-ai-proposal', authenticateToken, async (req: AuthReq
     }
 
     const proposalData = {
-      businessName:     selectedName || businessName || '',
-      selectedName:     selectedName || businessName || '',
-      industry:         industry || '',
-      brandVoice:       brandVoice || '',
-      brandVision:      brandVision || slogan || '',
+      businessName: selectedName || businessName || '',
+      selectedName: selectedName || businessName || '',
+      industry: industry || '',
+      brandVoice: brandVoice || '',
+      brandVision: brandVision || slogan || '',
       brandDescription: brandDescription || logoDescription || description || '',
-      selectedColors:   JSON.stringify(colorPalette || []),
-      referenceLogos:   JSON.stringify(referenceLogos || []),
+      selectedColors: JSON.stringify(colorPalette || []),
+      referenceLogos: JSON.stringify(referenceLogos || []),
       generatedLogoUrl: generatedLogoUrl || null,
       selectedLogoType: selectedLogoType || null,
       selectedLogoTypeName: selectedLogoTypeName || null,
-      suggestedNames:   JSON.stringify([selectedName].filter(Boolean)),
+      suggestedNames: JSON.stringify([selectedName].filter(Boolean)),
     };
 
     if (ticket.aiProposal) {
@@ -2355,9 +2515,9 @@ app.post('/api/tickets/save-ai-proposal', authenticateToken, async (req: AuthReq
       await prisma.clientInfo.update({
         where: { id: clientInfo.id },
         data: {
-          ...(businessName  && { businessName }),
-          ...(industry      && { industry }),
-          ...(description   && { description }),
+          ...(businessName && { businessName }),
+          ...(industry && { industry }),
+          ...(description && { description }),
           ...(targetAudience && { targetAudience }),
         },
       });
@@ -2393,15 +2553,15 @@ app.put('/api/tickets/:id/seo-checklist', authenticateToken, async (req: AuthReq
 
     // Remove any non-schema fields
     const allowedFields = [
-      'nicheSelected','domainChosen','domainName','gmailCreated','gmailEmail','gmailPassword',
-      'sallaAccountCreated','sallaEmail','sallaPassword','domainPurchased','packageUpgraded','packageType',
-      'logoDesigned','domainLinked',
-      'googleAnalyticsLinked','logoApplied','storeVerified','siloCreated','bankAccountAdded',
-      'infoPagesDone','footerDescDone','contactInfoAdded','whatsappButtonAdded',
-      'supplierSelected','supplierPlatformName','apiLinked','productsUploaded','productsCategorized',
-      'bannerDesigned','seoHomepage','seoCategoriesPage','profitMarginsSet',
-      'paymentGatewaysLinked','shippingCompaniesLinked','uiApplied','storeLaunched','linkSentToClient',
-      'storeEmail','storePassword',
+      'nicheSelected', 'domainChosen', 'domainName', 'gmailCreated', 'gmailEmail', 'gmailPassword',
+      'sallaAccountCreated', 'sallaEmail', 'sallaPassword', 'domainPurchased', 'packageUpgraded', 'packageType',
+      'logoDesigned', 'domainLinked',
+      'googleAnalyticsLinked', 'logoApplied', 'storeVerified', 'siloCreated', 'bankAccountAdded',
+      'infoPagesDone', 'footerDescDone', 'contactInfoAdded', 'whatsappButtonAdded',
+      'supplierSelected', 'supplierPlatformName', 'apiLinked', 'productsUploaded', 'productsCategorized',
+      'bannerDesigned', 'seoHomepage', 'seoCategoriesPage', 'profitMarginsSet',
+      'paymentGatewaysLinked', 'shippingCompaniesLinked', 'uiApplied', 'storeLaunched', 'linkSentToClient',
+      'storeEmail', 'storePassword',
     ];
     const cleanData: Record<string, any> = {};
     for (const key of allowedFields) {
@@ -2411,7 +2571,7 @@ app.put('/api/tickets/:id/seo-checklist', authenticateToken, async (req: AuthReq
     console.log('[SEO PUT] cleanData:', cleanData);
 
     const checklist = await prisma.seoChecklist.upsert({
-      where:  { ticketId: id },
+      where: { ticketId: id },
       update: cleanData,
       create: { ticketId: id, ...cleanData },
     });
@@ -2618,7 +2778,7 @@ app.put('/api/tickets/:id/product-supplier/send-to-client', authenticateToken, a
       update: { status: 'SENT_TO_CLIENT' },
     });
     if (ticket.customerId) {
-      await prisma.notification.create({ data: { userId: ticket.customerId, ticketId: id, title: '🏪 اختر مزود المنتجات', message: 'تم إعداد خيارات مزودي المنتجات لمتجرك. يرجى المراجعة والاختيار.', isPriority: true } }).catch(() => {});
+      await prisma.notification.create({ data: { userId: ticket.customerId, ticketId: id, title: '🏪 اختر مزود المنتجات', message: 'تم إعداد خيارات مزودي المنتجات لمتجرك. يرجى المراجعة والاختيار.', isPriority: true } }).catch(() => { });
     }
     res.json(selection);
   } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -2641,7 +2801,7 @@ app.put('/api/tickets/:id/product-supplier/client-select', authenticateToken, as
     // Notify SEO + AM
     const notifyUsers = [ticket.seoSpecialistId, ticket.accountManagerId].filter(Boolean) as string[];
     for (const uid of notifyUsers) {
-      await prisma.notification.create({ data: { userId: uid, ticketId: id, title: '🏪 العميل اختار مزود المنتجات', message: `تم اختيار: ${supplierName}`, isPriority: true } }).catch(() => {});
+      await prisma.notification.create({ data: { userId: uid, ticketId: id, title: '🏪 العميل اختار مزود المنتجات', message: `تم اختيار: ${supplierName}`, isPriority: true } }).catch(() => { });
     }
     res.json(selection);
   } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -2700,7 +2860,7 @@ app.put('/api/tickets/:id/product-supplier/client-file-review', authenticateToke
       });
       const notifyUsers = [ticket.seoSpecialistId, ticket.accountManagerId].filter(Boolean) as string[];
       for (const uid of notifyUsers) {
-        await prisma.notification.create({ data: { userId: uid, ticketId: id, title: '✅ العميل اعتمد ملف المنتجات', message: 'تم اعتماد ملف المنتجات من العميل.', isPriority: true } }).catch(() => {});
+        await prisma.notification.create({ data: { userId: uid, ticketId: id, title: '✅ العميل اعتمد ملف المنتجات', message: 'تم اعتماد ملف المنتجات من العميل.', isPriority: true } }).catch(() => { });
       }
       return res.json(selection);
     } else {
@@ -2711,7 +2871,7 @@ app.put('/api/tickets/:id/product-supplier/client-file-review', authenticateToke
       });
       const notifyUsers = [ticket.seoSpecialistId, ticket.accountManagerId].filter(Boolean) as string[];
       for (const uid of notifyUsers) {
-        await prisma.notification.create({ data: { userId: uid, ticketId: id, title: '🔄 طلب تعديل على ملف المنتجات', message: `ملاحظات العميل: ${notes.trim()}`, isPriority: true } }).catch(() => {});
+        await prisma.notification.create({ data: { userId: uid, ticketId: id, title: '🔄 طلب تعديل على ملف المنتجات', message: `ملاحظات العميل: ${notes.trim()}`, isPriority: true } }).catch(() => { });
       }
       return res.json(selection);
     }

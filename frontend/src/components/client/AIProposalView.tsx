@@ -356,7 +356,7 @@ export function AIProposalView({ proposal, legalData, intakeData }: { proposal: 
           {/* Logo Type Selection */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
             <h3 className="text-lg font-semibold text-slate-800 mb-2 flex items-center gap-2">
-              <ImageIcon className="w-5 h-5 text-violet-500" /> 🎨 اختر نوع الشعار المفضل
+              <ImageIcon className="w-5 h-5 text-violet-500" /> 🎨 اختر نوع الشعار المفضل <span className="text-red-500 text-xs font-bold">*</span>
             </h3>
             <p className="text-xs text-slate-500 mb-4">اختر النوع الذي يناسب علامتك التجارية — سيقوم فريق التصميم بتنفيذه</p>
             {logoTypesLoading ? (
@@ -466,8 +466,8 @@ export function AIProposalView({ proposal, legalData, intakeData }: { proposal: 
                setProfileComplete(true);
                navigate('/dashboard/customer');
              }}
-             disabled={confirmingDashboard}
-             className="w-full sm:w-auto py-3.5 px-10 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+             disabled={confirmingDashboard || (!isEditingName && !selectedName) || (isEditingName && !customName.trim()) || !selectedLogoTypeId}
+             className="w-full sm:w-auto py-3.5 px-10 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
            >
              {confirmingDashboard
                ? <><Loader2 className="w-5 h-5 animate-spin" /> جاري الحفظ والتحويل...</>
@@ -488,7 +488,7 @@ export function AIProposalView({ proposal, legalData, intakeData }: { proposal: 
 
              <button
                onClick={() => setShowAuthModal(true)}
-               disabled={(!isEditingName && !selectedName) || (isEditingName && !customName)}
+               disabled={(!isEditingName && !selectedName) || (isEditingName && !customName.trim()) || !selectedLogoTypeId}
                className="w-full sm:w-auto py-3.5 px-10 bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white rounded-xl font-medium shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
              >
                اعتماد ومتابعة لإنشاء التذكرة

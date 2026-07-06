@@ -47,6 +47,8 @@ model ClientInfo {
   fullNameInId          String?
   absherPhone           String?
   docsApproved          Boolean  @default(false)
+  idImageUrl            String?    // صورة الهوية
+  ibanCertUrl           String?    // شهادة الآيبان
   tickets               Ticket[]
 }
 
@@ -169,6 +171,8 @@ model Ticket {
   isDelivered        Boolean   @default(false)
   deliveredAt        DateTime?
   showCredentialsToDev Boolean  @default(false)
+  finalReviewStatus   String?  // SENT_TO_CLIENT | CLIENT_APPROVED | CLIENT_REVISION
+  finalReviewNotes    String?  // ملاحظات العميل عند طلب التعديل
 
   notifications    Notification[]
   auditLogs        AuditLog[]
@@ -321,6 +325,7 @@ model DesignDelivery {
   ticket          Ticket   @relation(fields: [ticketId], references: [id])
   
   figmaLink       String?           // رابط فيجما
+  driveLink       String?           // رابط درايف (البنرات والملفات)
   images          String?           // JSON array من روابط الصور
   
   status          String   @default("DRAFT")  // DRAFT | SENT_TO_SEO | SEO_APPROVED | SEO_REVISION | SENT_TO_AM | AM_APPROVED | AM_REVISION | SENT_TO_CLIENT | CLIENT_APPROVED | CLIENT_REVISION

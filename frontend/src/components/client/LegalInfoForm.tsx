@@ -18,6 +18,8 @@ interface LegalInfoData {
   nationalIdUrl?: string;
   fullNameInId?: string;
   absherPhone?: string;
+  idImageUrl?: string;
+  ibanCertUrl?: string;
 }
 
 interface Props {
@@ -89,6 +91,8 @@ export function LegalInfoForm({ onNext, initialData }: Props) {
   );
   const [fileName, setFileName] = useState<string | null>(null);
   const [idFileName, setIdFileName] = useState<string | null>(null);
+  const [idImageFileName, setIdImageFileName] = useState<string | null>(null);
+  const [ibanCertFileName, setIbanCertFileName] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const navigate = useNavigate();
 
@@ -210,6 +214,8 @@ export function LegalInfoForm({ onNext, initialData }: Props) {
     try {
       let documentFileUrl = initialData?.documentFileUrl || '';
       let nationalIdUrl = initialData?.nationalIdUrl || '';
+      let idImageUrl = '';
+      let ibanCertUrl = '';
 
       if (hasDocument === 'yes') {
         const fileInput = form.querySelector('input[name="legalDoc"]') as HTMLInputElement;
@@ -223,6 +229,20 @@ export function LegalInfoForm({ onNext, initialData }: Props) {
         if (idFile) {
           nationalIdUrl = await uploadFile(idFile);
         }
+      }
+
+      // Upload ID image (optional)
+      const idImageInput = form.querySelector('input[name="idImageFile"]') as HTMLInputElement;
+      const idImageFile = idImageInput?.files?.[0];
+      if (idImageFile) {
+        idImageUrl = await uploadFile(idImageFile);
+      }
+
+      // Upload IBAN certificate (optional)
+      const ibanCertInput = form.querySelector('input[name="ibanCertFile"]') as HTMLInputElement;
+      const ibanCertFile = ibanCertInput?.files?.[0];
+      if (ibanCertFile) {
+        ibanCertUrl = await uploadFile(ibanCertFile);
       }
 
       const data: LegalInfoData = {
@@ -239,6 +259,8 @@ export function LegalInfoForm({ onNext, initialData }: Props) {
         nationalIdUrl: hasDocument === 'no' ? nationalIdUrl : undefined,
         fullNameInId: hasDocument === 'no' ? (formData.get('fullNameInId') as string) : undefined,
         absherPhone: hasDocument === 'no' ? (formData.get('absherPhone') as string) : undefined,
+        idImageUrl: idImageUrl || undefined,
+        ibanCertUrl: ibanCertUrl || undefined,
       };
       onNext(data);
     } catch (err) {
@@ -512,7 +534,94 @@ export function LegalInfoForm({ onNext, initialData }: Props) {
               <ErrMsg field="iban" />
             </div>
 
-            <button type="submit" disabled={uploading} className="w-full py-3.5 sm:py-4 px-6 bg-gradient-to-l from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl font-medium shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-70 text-sm sm:text-base">
+            {/* ── صورة الهوية + شهادة الآيبان (إجباري) ── */}
+            <div className="relative py-2">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-red-200"></div>
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-white px-4 text-xs text-red-500 font-bold">مرفقات إجبارية *</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+              {/* صورة الهوية */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                  📄 صورة الهوية <span className="text-red-500 text-xs font-bold">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="file"
+                    name="idImageFile"
+                    accept=".png,.jpg,.jpeg,.pdf"
+                    onChange={(e) => setIdImageFileName(e.target.files?.[0]?.name || null)}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                  />
+                  <div className={`w-full px-4 py-4 border-2 border-dashed rounded-xl text-center transition-all duration-300 ${
+                    idImageFileName ? 'border-blue-400 bg-blue-50' : 'border-red-300 bg-red-50/30 hover:border-blue-300'
+                  }`}>
+                    {idImageFileName ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+                        <p className="text-xs text-blue-700 font-medium truncate">{idImageFileName}</p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-1.5">
+                        <Upload className="w-5 h-5 text-slate-400" />
+                        <p className="text-xs text-slate-500">رفع صورة الهوية</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {idImageFileName && (
+                  <button type="button" onClick={() => { setIdImageFileName(null); const inp = document.querySelector('input[name="idImageFile"]') as HTMLInputElement; if (inp) inp.value = ''; }} className="text-xs text-red-500 hover:text-red-700 font-medium">
+                    ✕ حذف الملف
+                  </button>
+                )}
+              </div>
+
+              {/* شهادة الآيبان */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                  🏦 شهادة الآيبان <span className="text-red-500 text-xs font-bold">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="file"
+                    name="ibanCertFile"
+                    accept=".png,.jpg,.jpeg,.pdf"
+                    onChange={(e) => setIbanCertFileName(e.target.files?.[0]?.name || null)}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                  />
+                  <div className={`w-full px-4 py-4 border-2 border-dashed rounded-xl text-center transition-all duration-300 ${
+                    ibanCertFileName ? 'border-teal-400 bg-teal-50' : 'border-red-300 bg-red-50/30 hover:border-teal-300'
+                  }`}>
+                    {ibanCertFileName ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                        <p className="text-xs text-teal-700 font-medium truncate">{ibanCertFileName}</p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-1.5">
+                        <Upload className="w-5 h-5 text-slate-400" />
+                        <p className="text-xs text-slate-500">رفع شهادة الآيبان</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {ibanCertFileName && (
+                  <button type="button" onClick={() => { setIbanCertFileName(null); const inp = document.querySelector('input[name="ibanCertFile"]') as HTMLInputElement; if (inp) inp.value = ''; }} className="text-xs text-red-500 hover:text-red-700 font-medium">
+                    ✕ حذف الملف
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {!idImageFileName || !ibanCertFileName ? (
+              <p className="text-xs text-red-500 font-bold text-center flex items-center justify-center gap-1.5">⚠️ يجب رفع صورة الهوية وشهادة الآيبان للمتابعة</p>
+            ) : null}
+            <button type="submit" disabled={uploading || !idImageFileName || !ibanCertFileName} className="w-full py-3.5 sm:py-4 px-6 bg-gradient-to-l from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl font-medium shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed text-sm sm:text-base">
               {uploading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -539,7 +648,7 @@ export function LegalInfoForm({ onNext, initialData }: Props) {
             <div className="relative">
               <input type="file" name="legalDoc" accept=".pdf,image/*" onChange={(e) => setFileName(e.target.files?.[0]?.name || null)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
               <div className={`w-full px-4 py-5 sm:py-6 border-2 border-dashed rounded-xl text-center transition-all duration-300 ${
-                fileName ? 'border-blue-400 bg-blue-50' : 'border-slate-200 bg-slate-50 hover:border-blue-300'
+                fileName ? 'border-blue-400 bg-blue-50' : 'border-red-300 bg-red-50/30 hover:border-blue-300'
               }`}>
                 {fileName ? (
                   <div className="flex items-center justify-center gap-2">
@@ -675,7 +784,94 @@ export function LegalInfoForm({ onNext, initialData }: Props) {
             <ErrMsg field="iban" />
           </div>
 
-          <button type="submit" disabled={uploading} className="w-full py-3.5 sm:py-4 px-6 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-medium shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 text-sm sm:text-base">
+          {/* ── صورة الهوية + شهادة الآيبان (إجباري) ── */}
+          <div className="relative py-2">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-red-200"></div>
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-white px-4 text-xs text-red-500 font-bold">مرفقات إجبارية *</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+            {/* صورة الهوية */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                📄 صورة الهوية <span className="text-red-500 text-xs font-bold">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="file"
+                  name="idImageFile"
+                  accept=".png,.jpg,.jpeg,.pdf"
+                  onChange={(e) => setIdImageFileName(e.target.files?.[0]?.name || null)}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                />
+                <div className={`w-full px-4 py-4 border-2 border-dashed rounded-xl text-center transition-all duration-300 ${
+                  idImageFileName ? 'border-blue-400 bg-blue-50' : 'border-red-300 bg-red-50/30 hover:border-blue-300'
+                }`}>
+                  {idImageFileName ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+                      <p className="text-xs text-blue-700 font-medium truncate">{idImageFileName}</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1.5">
+                      <Upload className="w-5 h-5 text-slate-400" />
+                      <p className="text-xs text-slate-500">رفع صورة الهوية</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {idImageFileName && (
+                <button type="button" onClick={() => { setIdImageFileName(null); const inps = document.querySelectorAll('input[name="idImageFile"]') as NodeListOf<HTMLInputElement>; inps.forEach(inp => inp.value = ''); }} className="text-xs text-red-500 hover:text-red-700 font-medium">
+                  ✕ حذف الملف
+                </button>
+              )}
+            </div>
+
+            {/* شهادة الآيبان */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                🏦 شهادة الآيبان <span className="text-red-500 text-xs font-bold">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="file"
+                  name="ibanCertFile"
+                  accept=".png,.jpg,.jpeg,.pdf"
+                  onChange={(e) => setIbanCertFileName(e.target.files?.[0]?.name || null)}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                />
+                <div className={`w-full px-4 py-4 border-2 border-dashed rounded-xl text-center transition-all duration-300 ${
+                  ibanCertFileName ? 'border-teal-400 bg-teal-50' : 'border-red-300 bg-red-50/30 hover:border-teal-300'
+                }`}>
+                  {ibanCertFileName ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                      <p className="text-xs text-teal-700 font-medium truncate">{ibanCertFileName}</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1.5">
+                      <Upload className="w-5 h-5 text-slate-400" />
+                      <p className="text-xs text-slate-500">رفع شهادة الآيبان</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {ibanCertFileName && (
+                <button type="button" onClick={() => { setIbanCertFileName(null); const inps = document.querySelectorAll('input[name="ibanCertFile"]') as NodeListOf<HTMLInputElement>; inps.forEach(inp => inp.value = ''); }} className="text-xs text-red-500 hover:text-red-700 font-medium">
+                  ✕ حذف الملف
+                </button>
+              )}
+            </div>
+          </div>
+
+          {(!fileName || !idImageFileName || !ibanCertFileName) ? (
+            <p className="text-xs text-red-500 font-bold text-center flex items-center justify-center gap-1.5">⚠️ يجب رفع الوثيقة وصورة الهوية وشهادة الآيبان للمتابعة</p>
+          ) : null}
+          <button type="submit" disabled={uploading || !fileName || !idImageFileName || !ibanCertFileName} className="w-full py-3.5 sm:py-4 px-6 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-medium shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed text-sm sm:text-base">
             {uploading ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />

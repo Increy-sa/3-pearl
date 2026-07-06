@@ -1,8 +1,8 @@
 # 📋 PROJECT LOG — Fawri.net (Salla Automated E-Commerce Onboarding Platform)
 
-> **Last Updated:** June 24, 2026  
-> **Version:** 4.3.0  
-> **Status:** Production-Ready — 6-Stage Workflow + RBAC Enhancements + File Preview  
+> **Last Updated:** June 30, 2026  
+> **Version:** 4.4.0  
+> **Status:** Production-Ready — 6-Stage Workflow + Cross-Stage Data Requests  
 > **Domain:** fawri.net  
 > **Repository:** https://github.com/ahmedhelm-y/Salla-Task-Manager.git
 
@@ -553,6 +553,13 @@ Nginx (port 443)
 | Jun 24, 2026 | **👥 AM Staff Management** — ACCOUNT_MANAGER can now manage staff (create/edit/toggle/delete/reset-password) with restriction: cannot modify ADMIN accounts | `staffRoutes.ts`, `index.ts` |
 | Jun 24, 2026 | **🔒 Ticket Visibility by Assignment** — SEO sees only assigned tickets (seoSpecialistId/assignedSeoId), DESIGNER (designerId/assignedDesignerId), DEVELOPER (developerId); ADMIN+AM see all | `staffRoutes.ts` |
 | Jun 24, 2026 | **🐛 DevChecklist Schema Fix** — added missing `devBriefToSeo` field to DevChecklist model; fixed `update` → `upsert` in resubmit endpoint | `schema.prisma`, `index.ts` |
+| Jun 30, 2026 | **🐛 DataRequest Prisma Fix** — removed non-existent `status` field from `dataRequest.create` in `/flexible-transfer`; added missing `fromRole` field | `index.ts` |
+| Jun 30, 2026 | **📋 Cross-Stage Data Requests (Customer)** — new `DataRequestsGlobalSection` component shows data request chat on ANY stage (except INTAKE); displays staff messages, textarea for reply | `CustomerDashboard.tsx` |
+| Jun 30, 2026 | **📋 Cross-Stage Data Requests (Staff)** — new `StaffDataRequestsSection` component in `TicketDetailPanel` with chat history, reply form, and "اعتماد وإغلاق" button; visible to ADMIN/AM/SEO on all stages except INTAKE | `TicketDetailPanel.tsx` |
+| Jun 30, 2026 | **🧠 Smart Status Detection** — status badges determined by message chronology instead of `isResolved` flag; if customer reply exists after staff message → "تم الرد ✅" regardless of DB state | `TicketDetailPanel.tsx` |
+| Jun 30, 2026 | **🔓 SEO Permissions for Data Requests** — SEO role added to allowed roles for `POST /data-request` (send) and `PUT /approve-intake` (close conversation); `fromRole` changed from hardcoded `ACCOUNT_MANAGER` to dynamic `role` | `index.ts` |
+| Jun 30, 2026 | **🔔 SEO Notification on Customer Reply** — added SEO to notification recipients when customer responds to data request (was AM + ADMIN only) | `index.ts` |
+| Jun 30, 2026 | **🧹 UI Cleanup** — removed "رابط الملفات / التسليمات" input and "حفظ الملاحظات" button from staff internal notes section | `TicketDetailPanel.tsx` |
 
 ---
 

@@ -10,25 +10,32 @@ export function ClientIntakeForm({ onProposalGenerated, legalData, onBack }: {
 }) {
   const [loading, setLoading] = useState(false);
   const [industry, setIndustry] = useState('');
+  const [businessName, setBusinessName] = useState('');
+  const [description, setDescription] = useState('');
+  const [targetAudience, setTargetAudience] = useState('');
+  const [otherIndustry, setOtherIndustry] = useState('');
 
   useAuthStore();
+
+  // Check if all required fields are filled
+  const isIndustryFilled = industry !== '' && (industry !== 'other' || otherIndustry.trim() !== '');
+  const allFieldsFilled = businessName.trim() !== '' && isIndustryFilled && description.trim() !== '' && targetAudience.trim() !== '';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    const formData = new FormData(e.target as HTMLFormElement);
-    let finalIndustry = formData.get('industry') as string;
+    let finalIndustry = industry;
     if (finalIndustry === 'other') {
-      finalIndustry = formData.get('otherIndustry') as string;
+      finalIndustry = otherIndustry;
     }
 
     const data = {
       ...legalData,
-      businessName: formData.get('businessName'),
+      businessName,
       industry: finalIndustry,
-      description: formData.get('description'),
-      targetAudience: formData.get('targetAudience'),
+      description,
+      targetAudience,
     };
 
     try {
@@ -77,12 +84,12 @@ export function ClientIntakeForm({ onProposalGenerated, legalData, onBack }: {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700">اسم النشاط التجاري</label>
-          <input required name="businessName" type="text" className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none text-start" placeholder="شركة الأفق" />
+          <label className="text-sm font-medium text-slate-700">اسم النشاط التجاري <span className="text-red-500">*</span></label>
+          <input required name="businessName" type="text" value={businessName} onChange={e => setBusinessName(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none text-start" placeholder="شركة الأفق" />
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700">مجال العمل</label>
+          <label className="text-sm font-medium text-slate-700">مجال العمل <span className="text-red-500">*</span></label>
           <select
             required
             name="industry"
@@ -100,11 +107,13 @@ export function ClientIntakeForm({ onProposalGenerated, legalData, onBack }: {
 
         {industry === 'other' && (
           <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
-            <label className="text-sm font-medium text-slate-700">يرجى كتابة مجال العمل</label>
+            <label className="text-sm font-medium text-slate-700">يرجى كتابة مجال العمل <span className="text-red-500">*</span></label>
             <input
               required
               name="otherIndustry"
               type="text"
+              value={otherIndustry}
+              onChange={e => setOtherIndustry(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none text-start"
               placeholder="مثلاً: بيع العطور المستوحاة"
             />
@@ -112,19 +121,19 @@ export function ClientIntakeForm({ onProposalGenerated, legalData, onBack }: {
         )}
 
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700">وصف النشاط (ماذا يقدم مشروعك؟)</label>
-          <textarea required name="description" rows={4} className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none resize-none text-start" placeholder="ماذا يقدم مشروعك؟"></textarea>
+          <label className="text-sm font-medium text-slate-700">وصف النشاط (ماذا يقدم مشروعك؟) <span className="text-red-500">*</span></label>
+          <textarea required name="description" rows={4} value={description} onChange={e => setDescription(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none resize-none text-start" placeholder="ماذا يقدم مشروعك؟"></textarea>
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700">الجمهور المستهدف</label>
-          <input required name="targetAudience" type="text" className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none text-start" placeholder="مثال: الشباب، المهتمين بالتقنية" />
+          <label className="text-sm font-medium text-slate-700">الجمهور المستهدف <span className="text-red-500">*</span></label>
+          <input required name="targetAudience" type="text" value={targetAudience} onChange={e => setTargetAudience(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none text-start" placeholder="مثال: الشباب، المهتمين بالتقنية" />
         </div>
 
         <button
-          disabled={loading}
+          disabled={loading || !allFieldsFilled}
           type="submit"
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl transition-colors mt-6 flex items-center justify-center gap-2 disabled:opacity-70"
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl transition-colors mt-6 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 rtl:-scale-x-100" />}
           {loading ? 'جاري توليد المقترح...' : 'توليد مقترح الهوية بالذكاء الاصطناعي'}

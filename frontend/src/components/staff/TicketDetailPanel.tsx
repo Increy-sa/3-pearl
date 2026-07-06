@@ -1152,6 +1152,46 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
                 </div>
               ))}
             </div>
+
+            {/* صورة الهوية وشهادة الآيبان */}
+            {(ticket.client?.idImageUrl || ticket.client?.ibanCertUrl) && (
+              <div className="mt-3 bg-slate-50 rounded-2xl border border-slate-100 p-4 space-y-3">
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">المرفقات</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* صورة الهوية */}
+                  <div className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-white">
+                    <FileText className="w-5 h-5 text-blue-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-slate-700">📄 صورة الهوية</p>
+                      {ticket.client?.idImageUrl ? (
+                        <a href={ticket.client.idImageUrl} target="_blank" rel="noreferrer"
+                          className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 mt-0.5">
+                          <ExternalLink className="w-3 h-3" /> عرض / تحميل
+                        </a>
+                      ) : (
+                        <p className="text-[10px] text-slate-400 mt-0.5">لم يتم الرفع</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* شهادة الآيبان */}
+                  <div className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-white">
+                    <FileText className="w-5 h-5 text-teal-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-slate-700">🏦 شهادة الآيبان</p>
+                      {ticket.client?.ibanCertUrl ? (
+                        <a href={ticket.client.ibanCertUrl} target="_blank" rel="noreferrer"
+                          className="text-[10px] text-teal-600 hover:underline flex items-center gap-1 mt-0.5">
+                          <ExternalLink className="w-3 h-3" /> عرض / تحميل
+                        </a>
+                      ) : (
+                        <p className="text-[10px] text-slate-400 mt-0.5">لم يتم الرفع</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </CollapsibleSection>
 
           {/* ── Legal Documents Section (ADMIN + AM only) ────────── */}
@@ -1544,19 +1584,51 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
           })()}
 
           {/* Legal Doc Link — Task 3 */}
-          {normalizeUrl(ticket.client?.legalDocUrl) && (
+          {(() => {
+            const docUrl = normalizeUrl(ticket.client?.legalDocUrl) || normalizeUrl(ticket.client?.documentFileUrl);
+            const idUrl = normalizeUrl(ticket.client?.idImageUrl);
+            const ibanUrl = normalizeUrl(ticket.client?.ibanCertUrl);
+            if (!docUrl && !idUrl && !ibanUrl) return null;
+            return (
             <section className="space-y-3">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">المستندات القانونية</h3>
-              <a href={normalizeUrl(ticket.client.legalDocUrl)!} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 bg-blue-50 rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors">
+              {docUrl && (
+              <a href={docUrl} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 bg-blue-50 rounded-xl border border-blue-200 hover:bg-blue-100 transition-colors">
                 <FileText className="w-5 h-5 text-blue-600 shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-blue-800">الوثيقة القانونية</p>
-                  <p className="text-[10px] text-blue-600 truncate">{ticket.client.legalDocUrl}</p>
+                  <p className="text-xs font-bold text-blue-800">الوثيقة / السجل التجاري</p>
+                  <p className="text-[10px] text-blue-600 truncate">{ticket.client.legalDocUrl || ticket.client.documentFileUrl}</p>
                 </div>
                 <Download className="w-4 h-4 text-blue-500 shrink-0" />
               </a>
+              )}
+
+              {/* صورة الهوية */}
+              {idUrl && (
+                <a href={idUrl} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 bg-indigo-50 rounded-xl border border-indigo-200 hover:bg-indigo-100 transition-colors">
+                  <FileText className="w-5 h-5 text-indigo-600 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-indigo-800">📄 صورة الهوية</p>
+                    <p className="text-[10px] text-indigo-600 truncate">{ticket.client.idImageUrl}</p>
+                  </div>
+                  <Download className="w-4 h-4 text-indigo-500 shrink-0" />
+                </a>
+              )}
+
+              {/* شهادة الآيبان */}
+              {ibanUrl && (
+                <a href={ibanUrl} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 bg-teal-50 rounded-xl border border-teal-200 hover:bg-teal-100 transition-colors">
+                  <FileText className="w-5 h-5 text-teal-600 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-teal-800">🏦 شهادة الآيبان</p>
+                    <p className="text-[10px] text-teal-600 truncate">{ticket.client.ibanCertUrl}</p>
+                  </div>
+                  <Download className="w-4 h-4 text-teal-500 shrink-0" />
+                </a>
+              )}
             </section>
-          )}
+            );
+          })()}
 
           {/* Internal Notes */}
           <CollapsibleSection title="💬 ملاحظات الفريق الداخلية" color="indigo">
@@ -1583,7 +1655,7 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
 
 
           {/* ══════ SEO_STORE_SETUP Stage ══════ */}
-          {(ticket.stage === 'SEO_STORE_SETUP' || (userRole === 'SEO' && ticket.stage !== 'SEO_STORE_SETUP' && ticket.stage !== 'DELIVERED')) && (() => {
+          {(ticket.stage === 'SEO_STORE_SETUP' || ((userRole === 'SEO' || userRole === 'ADMIN') && ticket.stage !== 'SEO_STORE_SETUP' && ticket.stage !== 'DELIVERED')) && (() => {
             const isNativeStage = ticket.stage === 'SEO_STORE_SETUP';
             if (!isNativeStage && !['SEO', 'ADMIN'].includes(userRole)) return null;
             return (
@@ -1610,7 +1682,7 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
           )}
 
           {/* ══════ SEO_FINAL Stage ══════ */}
-          {(ticket.stage === 'SEO_FINAL' || (userRole === 'SEO' && ticket.stage !== 'SEO_FINAL' && ticket.stage !== 'DELIVERED')) && (() => {
+          {(ticket.stage === 'SEO_FINAL' || ((userRole === 'SEO' || userRole === 'ADMIN') && ticket.stage !== 'SEO_FINAL' && ticket.stage !== 'DELIVERED')) && (() => {
             const isNativeStage = ticket.stage === 'SEO_FINAL';
             if (!isNativeStage && !['SEO', 'ADMIN'].includes(userRole)) return null;
             return (
@@ -1625,6 +1697,30 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
               </CollapsibleSeoSection>
             );
           })()}
+
+          {/* ── Final Review Status — visible to all staff ── */}
+          {ticket.finalReviewStatus && (
+            <section className="space-y-2">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">📋 المراجعة النهائية للعميل</h3>
+              {ticket.finalReviewStatus === 'SENT_TO_CLIENT' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+                  <p className="text-xs font-bold text-blue-800 flex items-center gap-1.5">⏳ بانتظار مراجعة العميل</p>
+                </div>
+              )}
+              {ticket.finalReviewStatus === 'CLIENT_APPROVED' && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+                  <p className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">✅ العميل اعتمد المراجعة النهائية</p>
+                  {ticket.finalReviewNotes && <p className="text-xs text-emerald-700 mt-1">{ticket.finalReviewNotes}</p>}
+                </div>
+              )}
+              {ticket.finalReviewStatus === 'CLIENT_REVISION' && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3 space-y-1">
+                  <p className="text-xs font-bold text-red-800 flex items-center gap-1.5">✏️ العميل يطلب تعديل قبل التسليم</p>
+                  {ticket.finalReviewNotes && <p className="text-xs text-red-700 bg-white rounded-lg p-2 border border-red-100">{ticket.finalReviewNotes}</p>}
+                </div>
+              )}
+            </section>
+          )}
 
           {/* ── Flexible Transfer — AM / SEO / ADMIN (all stages except DELIVERED) ── */}
           {ticket.stage !== 'DELIVERED' && ['ADMIN', 'ACCOUNT_MANAGER', 'SEO'].includes(userRole) && (

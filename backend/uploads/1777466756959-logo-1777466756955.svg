@@ -1,9 +1,0 @@
-<svg width="150" height="150" viewBox="0 0 150 150" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="75" cy="75" r="75" fill="#000000"/>
-  <g fill="#FFFFFF">
-    <path d="M75 35L85 55H65L75 35Z"/>
-    <path d="M75 115L65 95H85L75 115Z"/>
-    <path d="M35 75L55 65V85L35 75Z"/>
-    <path d="M115 75L95 85V65L115 75Z"/>
-  </g>
-</svg>

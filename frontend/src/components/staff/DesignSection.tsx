@@ -31,6 +31,7 @@ interface Props {
 export function DesignSection({ ticket, headers, staff, userRole, onRefresh, setErrorModal }: Props) {
   const [delivery, setDelivery] = useState<any>(null);
   const [figmaLink, setFigmaLink] = useState('');
+  const [driveLink, setDriveLink] = useState('');
   const [images, setImages] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
@@ -50,8 +51,8 @@ export function DesignSection({ ticket, headers, staff, userRole, onRefresh, set
   const [logoTypeImageUrl, setLogoTypeImageUrl] = useState<string | null>(null);
 
   // ─── Role helpers ───────────────────────────────────────────────────
-  const isDesigner = userRole === 'DESIGNER';
-  const isSEO = userRole === 'SEO';
+  const isDesigner = userRole === 'DESIGNER' || userRole === 'ADMIN';
+  const isSEO = userRole === 'SEO' || userRole === 'ADMIN';
   const isAdminOrAM = userRole === 'ADMIN' || userRole === 'ACCOUNT_MANAGER';
 
   useEffect(() => {
@@ -60,6 +61,7 @@ export function DesignSection({ ticket, headers, staff, userRole, onRefresh, set
         if (d && d.id) {
           setDelivery(d);
           setFigmaLink(d.figmaLink || '');
+          setDriveLink(d.driveLink || '');
           try { setImages(JSON.parse(d.images || '[]')); } catch { setImages([]); }
         }
       }).catch(() => { });
@@ -93,7 +95,7 @@ export function DesignSection({ ticket, headers, staff, userRole, onRefresh, set
     send ? setSending(true) : setSaving(true);
     try {
       const res = await fetch(`${API}/api/tickets/${ticket.id}/design-delivery`, {
-        method: 'PUT', headers, body: JSON.stringify({ figmaLink, images })
+        method: 'PUT', headers, body: JSON.stringify({ figmaLink, driveLink, images })
       });
       if (!res.ok) { setErrorModal('فشل الحفظ'); return; }
       const saved = await res.json();
@@ -324,6 +326,27 @@ export function DesignSection({ ticket, headers, staff, userRole, onRefresh, set
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════
+          Drive Link (Banners, Assets)
+         ═══════════════════════════════════════════════════════════════ */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
+        <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><Link2 className="w-3.5 h-3.5" /> رابط Google Drive (البنرات والملفات)</label>
+        {isDesigner ? (
+          <input type="url" value={driveLink} onChange={e => setDriveLink(e.target.value)} disabled={!canDesignerEdit}
+            placeholder="https://drive.google.com/drive/folders/..." dir="ltr"
+            className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-violet-300 disabled:opacity-50 text-left" />
+        ) : (
+          driveLink ? (
+            <a href={ensureUrl(driveLink)} target="_blank" rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-violet-700 bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 hover:bg-violet-100 transition-colors">
+              <ExternalLink className="w-3.5 h-3.5" /> فتح رابط Drive
+            </a>
+          ) : (
+            <p className="text-xs text-slate-400">لم يتم إضافة رابط Drive بعد</p>
+          )
+        )}
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════
           Design Images — HIDDEN for DESIGNER when logo was already approved
          ═══════════════════════════════════════════════════════════════ */}
       {!(isDesigner && wasClientApproved) && (
@@ -373,21 +396,22 @@ export function DesignSection({ ticket, headers, staff, userRole, onRefresh, set
           Save / Send to SEO — DESIGNER only
          ═══════════════════════════════════════════════════════════════ */}
       {canDesignerEdit && (() => {
-        const hasContent = wasClientApproved || !!(figmaLink.trim() || images.length > 0);
+        const isUrl = (v: string) => /^https?:\/\/.+/i.test(v.trim());
+        const hasContent = isUrl(figmaLink) || isUrl(driveLink) || (!wasClientApproved && images.length > 0);
         return (
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <button onClick={() => save(false)} disabled={saving} className="px-4 py-2 bg-slate-600 text-white rounded-xl text-xs font-bold disabled:opacity-50 cursor-pointer">
                 {saving ? 'جاري الحفظ...' : 'حفظ'}
               </button>
-              <button onClick={() => save(true)} disabled={sending || !hasContent} className="px-4 py-2 bg-violet-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer">
+              <button onClick={() => save(true)} disabled={sending || !hasContent} className={`px-4 py-2 bg-violet-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 ${!hasContent || sending ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
                 <Send className="w-3.5 h-3.5" /> {sending ? 'جاري الإرسال...' : 'إرسال لفريق SEO'}
               </button>
             </div>
             {!hasContent && (
               <p className="text-[11px] text-amber-600 font-bold flex items-center gap-1.5">
                 <AlertCircle className="w-3.5 h-3.5" />
-                يجب إضافة رابط Figma أو رفع صورة تصميم واحدة على الأقل قبل الإرسال
+                يجب إضافة رابط Figma أو رابط Drive أو رفع صورة تصميم واحدة على الأقل قبل الإرسال
               </p>
             )}
           </div>

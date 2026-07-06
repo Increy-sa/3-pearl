@@ -20,6 +20,7 @@ const CLIENT_ACTIONS = [
   { key: 'SHOW_PROPOSALS', label: 'عرض مقترحات الدومين للاعتماد' },
   { key: 'SHOW_SUPPLIERS', label: 'عرض مزودي المنتجات للاعتماد' },
   { key: 'SHOW_PRODUCT_FILE', label: 'عرض ملف المنتجات للاعتماد' },
+  { key: 'SHOW_FINAL_REVIEW', label: 'عرض المراجعة النهائية قبل التسليم' },
   { key: 'REQUEST_DATA', label: 'طلب بيانات إضافية' },
 ];
 
@@ -71,6 +72,7 @@ export function FlexibleTransferSection({ ticket, headers, staff, userRole, onRe
       ]).then(([dd, sc]) => {
         setDeliveryData({
           figmaLink: dd?.figmaLink || '',
+          driveLink: dd?.driveLink || '',
           domain: ticket.aiProposal?.selectedDomain || ticket.storeDetails?.domainName || '',
           logoType: ticket.aiProposal?.selectedLogoTypeName || '',
           storeEmail: sc?.newGmail || sc?.storeEmail || '',
@@ -160,6 +162,9 @@ export function FlexibleTransferSection({ ticket, headers, staff, userRole, onRe
     if (!selectedStage) return false;
     if (selectedStage === 'CLIENT') return !!clientAction && (clientAction !== 'REQUEST_DATA' || !!clientMessage.trim());
     if (selectedStage === 'ASSIGN_AM') return !!assigneeId;
+    // Stages with staffRole require an assignee
+    const stage = TARGET_STAGES.find(s => s.key === selectedStage);
+    if (stage?.staffRole && !assigneeId) return false;
     return true;
   };
 
@@ -414,6 +419,13 @@ export function FlexibleTransferSection({ ticket, headers, staff, userRole, onRe
                           <Palette className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                           <span className="text-emerald-700 font-bold">Figma:</span>
                           <span className="text-emerald-900 truncate">{deliveryData.figmaLink}</span>
+                        </div>
+                      )}
+                      {deliveryData.driveLink && (
+                        <div className="flex items-center gap-2">
+                          <Palette className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span className="text-emerald-700 font-bold">Drive:</span>
+                          <span className="text-emerald-900 truncate">{deliveryData.driveLink}</span>
                         </div>
                       )}
                       {deliveryData.logoType && (

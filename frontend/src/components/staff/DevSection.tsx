@@ -40,8 +40,8 @@ export function DevSection({ ticket, headers, userRole, onRefresh, setErrorModal
   const { showToast } = useToast();
 
   // ─── Role helpers ───────────────────────────────────────────────────
-  const isDeveloper = userRole === 'DEVELOPER';
-  const isSEO = userRole === 'SEO';
+  const isDeveloper = userRole === 'DEVELOPER' || userRole === 'ADMIN';
+  const isSEO = userRole === 'SEO' || userRole === 'ADMIN';
   const canSeeCredentials = ticket.showCredentialsToDev === true || ['ADMIN', 'ACCOUNT_MANAGER', 'SEO'].includes(userRole);
 
   useEffect(() => {

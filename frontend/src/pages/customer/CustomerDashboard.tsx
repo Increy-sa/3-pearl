@@ -4,7 +4,7 @@ import {
   Loader2, CheckCircle2, Clock, Palette, Type, Globe,
   LayoutDashboard, User as UserIcon, MessageSquare, LogOut, 
   Image as ImageIcon, FileText, ExternalLink, Activity, ShieldCheck,
-  IdCard, Smartphone, ThumbsUp, PenLine, AlertCircle, CheckCircle, Send, Download, Eye
+  IdCard, Smartphone, ThumbsUp, PenLine, AlertCircle, CheckCircle, Send, Download, Eye, Upload, Trash2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from '../../config/api';
@@ -812,6 +812,14 @@ function DesignCustomerSection({ ticket, token }: { ticket: any; token: string }
         </a>
       )}
 
+      {/* Drive link */}
+      {delivery.driveLink && (
+        <a href={ensureUrl(delivery.driveLink)} target="_blank" rel="noreferrer"
+          className="flex items-center gap-2 px-4 py-3 bg-white border border-teal-200 rounded-xl text-sm font-bold text-teal-700 hover:bg-teal-50">
+          <ExternalLink className="w-4 h-4" /> عرض الملفات في Google Drive
+        </a>
+      )}
+
       {/* Previously approved logo — show as reference */}
       {wasPreviouslyApproved && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 space-y-2">
@@ -970,8 +978,8 @@ function DesignCustomerSection({ ticket, token }: { ticket: any; token: string }
           className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer">
           <ThumbsUp className="w-4 h-4" /> {wasPreviouslyApproved ? 'اعتماد التحديثات' : selectedImage && hasMultiple ? 'اعتماد التصميم المختار' : 'اعتماد التصميم'}
         </button>
-        <button onClick={() => submitReview('REVISION')} disabled={sending}
-          className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer">
+        <button onClick={() => submitReview('REVISION')} disabled={sending || !notes.trim()}
+          className={`flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 ${sending || !notes.trim() ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
           <PenLine className="w-4 h-4" /> طلب تعديل
         </button>
       </div>
@@ -1094,6 +1102,158 @@ function SeoFinalCustomerSection({ ticket, token }: { ticket: any; token: string
   );
 }
 
+// ═══════ FINAL REVIEW Customer Section ═══════
+function FinalReviewCustomerSection({ ticket, token }: { ticket: any; token: string }) {
+  const [summary, setSummary] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [notes, setNotes] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<'APPROVE' | 'REVISION' | null>(null);
+  const hdrs = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+  const { showToast } = useToast();
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/tickets/${ticket.id}/final-review-summary`, { headers: { 'Authorization': `Bearer ${token}` } })
+      .then(r => r.json()).then(d => { if (d && !d.error) setSummary(d); }).catch(() => {}).finally(() => setLoading(false));
+  }, [ticket.id, token]);
+
+  const submitReview = async (action: 'APPROVE' | 'REVISION') => {
+    if (action === 'REVISION' && !notes.trim()) { setError('يجب كتابة ملاحظات التعديل'); return; }
+    setSending(true); setError(null);
+    try {
+      const res = await fetch(`${API_URL}/api/tickets/${ticket.id}/final-review`, {
+        method: 'PUT', headers: hdrs, body: JSON.stringify({ action, notes })
+      });
+      if (res.ok) { setDone(action); showToast(action === 'APPROVE' ? 'تم الاعتماد بنجاح! 🎉' : 'تم إرسال طلب التعديل ✏️'); }
+      else { const e = await res.json(); setError(e.error); }
+    } catch { setError('تعذر الاتصال'); }
+    finally { setSending(false); }
+  };
+
+  if (loading) return null;
+  if (!summary || summary.finalReviewStatus !== 'SENT_TO_CLIENT') return null;
+
+  // Already submitted
+  if (done === 'APPROVE' || summary.finalReviewStatus === 'CLIENT_APPROVED') {
+    return (
+      <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 sm:p-6 flex items-start gap-3">
+        <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+        <div><p className="text-sm font-bold text-emerald-800">تم اعتماد المراجعة النهائية ✅</p><p className="text-xs text-emerald-700 mt-1">شكراً لك! جاري تجهيز التسليم النهائي.</p></div>
+      </div>
+    );
+  }
+  if (done === 'REVISION') {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-6 flex items-start gap-3">
+        <PenLine className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+        <div><p className="text-sm font-bold text-amber-800">تم إرسال طلب التعديل ✏️</p><p className="text-xs text-amber-700 mt-1">سيتم مراجعة ملاحظاتك والتواصل معك قريباً.</p></div>
+      </div>
+    );
+  }
+
+  const InfoRow = ({ label, value, isLink }: { label: string; value?: string | null; isLink?: boolean }) => {
+    if (!value) return null;
+    return (
+      <div className="flex items-start gap-3 py-2.5 border-b border-slate-100 last:border-0">
+        <span className="text-xs font-bold text-slate-500 min-w-[100px] shrink-0">{label}</span>
+        {isLink ? (
+          <a href={ensureUrl(value)} target="_blank" rel="noreferrer" className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1 break-all">
+            <ExternalLink className="w-3 h-3 shrink-0" /> {value}
+          </a>
+        ) : (
+          <span className="text-xs text-slate-800 font-medium">{value}</span>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="bg-gradient-to-l from-indigo-600 to-violet-600 rounded-2xl p-5 text-center text-white shadow-lg">
+        <p className="text-3xl mb-2">📋</p>
+        <h3 className="text-lg font-extrabold">المراجعة النهائية قبل التسليم</h3>
+        <p className="text-xs text-indigo-100 mt-1">يرجى مراجعة جميع تفاصيل مشروعك والاعتماد النهائي</p>
+      </div>
+
+      {/* Logo */}
+      {(summary.selectedDesignUrl || summary.approvedLogoUrl) && (
+        <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
+          <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">🎨 الشعار المعتمد</h4>
+          <div className="flex justify-center">
+            <img src={summary.selectedDesignUrl || summary.approvedLogoUrl} alt="الشعار" className="max-h-40 max-w-full rounded-xl border border-slate-200 shadow-sm" />
+          </div>
+          {summary.logoTypeName && <p className="text-xs text-slate-500 text-center">نوع الشعار: <span className="font-bold">{summary.logoTypeName}</span></p>}
+        </div>
+      )}
+
+      {/* Store Details */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-1">
+        <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-2">🏪 تفاصيل المتجر</h4>
+        <InfoRow label="اسم المتجر" value={summary.storeName} />
+        <InfoRow label="الدومين" value={summary.domain} isLink />
+        <InfoRow label="رابط سلّة" value={summary.sallaStoreUrl} isLink />
+      </div>
+
+      {/* Design Links */}
+      {(summary.figmaLink || summary.driveLink) && (
+        <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
+          <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">🖼️ روابط التصاميم</h4>
+          {summary.figmaLink && (
+            <a href={ensureUrl(summary.figmaLink)} target="_blank" rel="noreferrer"
+              className="flex items-center gap-2 px-4 py-3 bg-violet-50 border border-violet-200 rounded-xl text-sm font-bold text-violet-700 hover:bg-violet-100 transition-colors">
+              <ExternalLink className="w-4 h-4" /> عرض التصميم في Figma
+            </a>
+          )}
+          {summary.driveLink && (
+            <a href={ensureUrl(summary.driveLink)} target="_blank" rel="noreferrer"
+              className="flex items-center gap-2 px-4 py-3 bg-teal-50 border border-teal-200 rounded-xl text-sm font-bold text-teal-700 hover:bg-teal-100 transition-colors">
+              <ExternalLink className="w-4 h-4" /> عرض الملفات في Google Drive
+            </a>
+          )}
+        </div>
+      )}
+
+      {/* Supplier & Products */}
+      {(summary.supplierName || summary.productFileUrl || summary.productLink) && (
+        <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-1">
+          <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-2">📦 المنتجات والمزود</h4>
+          <InfoRow label="مزود المنتجات" value={summary.supplierName} />
+          <InfoRow label="ملف المنتجات" value={summary.productFileUrl} isLink />
+          <InfoRow label="رابط المنتجات" value={summary.productLink} isLink />
+        </div>
+      )}
+
+      {/* Business Info */}
+      {(summary.businessName || summary.industry || summary.description) && (
+        <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-1">
+          <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-2">📋 تفاصيل النشاط</h4>
+          <InfoRow label="اسم النشاط" value={summary.businessName} />
+          <InfoRow label="المجال" value={summary.industry} />
+          <InfoRow label="الوصف" value={summary.description} />
+          <InfoRow label="الجمهور المستهدف" value={summary.targetAudience} />
+        </div>
+      )}
+
+      {/* Actions */}
+      <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="ملاحظات (اختياري للاعتماد، إلزامي لطلب التعديل)..." rows={3}
+        className="w-full text-sm border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:outline-none resize-none" />
+      {error && <div className="flex items-start gap-2 p-3 bg-red-50 rounded-xl border border-red-100"><AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" /><p className="text-xs text-red-700">{error}</p></div>}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <button onClick={() => submitReview('APPROVE')} disabled={sending}
+          className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer">
+          <ThumbsUp className="w-4 h-4" /> اعتماد واستلام المتجر
+        </button>
+        <button onClick={() => submitReview('REVISION')} disabled={sending || !notes.trim()}
+          className={`flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 ${sending || !notes.trim() ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+          <PenLine className="w-4 h-4" /> طلب تعديل
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ═══════ DELIVERED Customer Section ═══════
 function DeliveredCustomerSection({ ticket, token }: { ticket: any; token: string }) {
   const [proposal, setProposal] = useState<any>(null);
@@ -1172,6 +1332,15 @@ function DeliveredCustomerSection({ ticket, token }: { ticket: any; token: strin
           </div>
         )}
 
+        {delivery?.driveLink && (
+          <div>
+            <p className="text-[10px] text-emerald-600 font-bold mb-1">ملفات التصميم</p>
+            <a href={ensureUrl(delivery.driveLink)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm font-bold text-teal-700 hover:underline">
+              <ExternalLink className="w-3.5 h-3.5" /> فتح في Drive
+            </a>
+          </div>
+        )}
+
         {imgs.length > 0 && (
           <div className="space-y-2">
             <p className="text-[10px] text-emerald-600 font-bold">التصاميم المعتمدة</p>
@@ -1235,6 +1404,68 @@ function DeliveredCustomerSection({ ticket, token }: { ticket: any; token: strin
 
       <div className="text-center py-4">
         <p className="text-sm text-slate-500">شكراً لثقتك بنا! نتمنى لك التوفيق في متجرك 💚</p>
+      </div>
+    </div>
+  );
+}
+
+// ═══════ ID Document View Section (Read-Only) ═══════
+function IdDocumentUploadSection({ ticket }: { ticket: any; token: string; onUpdate: (t: any) => void }) {
+  const idUrl = ticket.client?.idImageUrl;
+  const ibanUrl = ticket.client?.ibanCertUrl;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* صورة الهوية */}
+        <div className="rounded-2xl border border-slate-200 p-4 space-y-3">
+          <p className="text-sm font-bold text-slate-700 flex items-center gap-2">📄 صورة الهوية</p>
+          {idUrl ? (
+            <div className="space-y-2">
+              {/\.(png|jpg|jpeg|gif|webp)$/i.test(idUrl) ? (
+                <img src={idUrl} alt="صورة الهوية" className="w-full max-h-40 object-contain rounded-xl border border-slate-200 bg-slate-50" />
+              ) : (
+                <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl border border-blue-200">
+                  <FileText className="w-5 h-5 text-blue-600 shrink-0" />
+                  <span className="text-xs font-bold text-blue-700 truncate flex-1">ملف مرفوع</span>
+                </div>
+              )}
+              <a href={idUrl} target="_blank" rel="noreferrer"
+                className="w-full py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-blue-200">
+                <Eye className="w-3.5 h-3.5" /> عرض
+              </a>
+            </div>
+          ) : (
+            <div className="w-full py-6 border-2 border-dashed border-slate-200 rounded-xl text-center bg-slate-50">
+              <p className="text-xs text-slate-400">لم يتم الرفع</p>
+            </div>
+          )}
+        </div>
+
+        {/* شهادة الآيبان */}
+        <div className="rounded-2xl border border-slate-200 p-4 space-y-3">
+          <p className="text-sm font-bold text-slate-700 flex items-center gap-2">🏦 شهادة الآيبان</p>
+          {ibanUrl ? (
+            <div className="space-y-2">
+              {/\.(png|jpg|jpeg|gif|webp)$/i.test(ibanUrl) ? (
+                <img src={ibanUrl} alt="شهادة الآيبان" className="w-full max-h-40 object-contain rounded-xl border border-slate-200 bg-slate-50" />
+              ) : (
+                <div className="flex items-center gap-2 p-3 bg-teal-50 rounded-xl border border-teal-200">
+                  <FileText className="w-5 h-5 text-teal-600 shrink-0" />
+                  <span className="text-xs font-bold text-teal-700 truncate flex-1">ملف مرفوع</span>
+                </div>
+              )}
+              <a href={ibanUrl} target="_blank" rel="noreferrer"
+                className="w-full py-2 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-teal-200">
+                <Eye className="w-3.5 h-3.5" /> عرض
+              </a>
+            </div>
+          ) : (
+            <div className="w-full py-6 border-2 border-dashed border-slate-200 rounded-xl text-center bg-slate-50">
+              <p className="text-xs text-slate-400">لم يتم الرفع</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1588,6 +1819,11 @@ export function CustomerDashboard() {
               </div>
             )}
 
+            {/* 📋 FINAL REVIEW — Client reviews all details before delivery */}
+            {ticket.finalReviewStatus && (
+              <FinalReviewCustomerSection ticket={ticket} token={token} />
+            )}
+
             {/* 🎉 DELIVERED — Project Complete Banner */}
             {ticket.stage === 'DELIVERED' && (
               <div className="relative overflow-hidden bg-gradient-to-l from-emerald-600 to-teal-600 rounded-2xl sm:rounded-3xl p-6 sm:p-10 shadow-xl shadow-emerald-500/20 border border-emerald-400">
@@ -1928,6 +2164,14 @@ export function CustomerDashboard() {
                     </div>
                   </div>
 
+                </div>
+
+                {/* ID Image & IBAN Certificate */}
+                <div className="bg-white p-4 sm:p-6 lg:p-8 rounded-2xl sm:rounded-[2.5rem] shadow-sm border border-slate-100">
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-4 sm:mb-6 flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-blue-500 shrink-0" /> مرفقات الهوية والآيبان
+                  </h3>
+                  <IdDocumentUploadSection ticket={ticket} token={token!} onUpdate={(t: any) => setTicket(t)} />
                 </div>
 
                 {/* Reference Images */}
