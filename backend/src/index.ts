@@ -32,6 +32,9 @@ const getGenAI = () => {
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-for-development';
 const prisma = new PrismaClient();
 
+/** Safely extract a single string param from Express v5 req.params */
+const param = (v: string | string[] | undefined): string => Array.isArray(v) ? v[0] : (v || '');
+
 // CORS: accept both localhost (dev) and production domain
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:5173',
@@ -983,7 +986,7 @@ app.get('/api/tickets', authenticateToken, async (req: AuthRequest, res) => {
 // أ- طلب بيانات إضافية من العميل (AM → Customer)
 app.post('/api/tickets/:id/data-request', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { message } = req.body;
     const { role, userId } = req.user!;
 
@@ -1027,7 +1030,7 @@ app.post('/api/tickets/:id/data-request', authenticateToken, async (req: AuthReq
 // ب- رد العميل على طلب البيانات (Customer → AM)
 app.post('/api/tickets/:id/data-response', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { message } = req.body;
     const { role, userId } = req.user!;
 
@@ -1088,7 +1091,7 @@ app.post('/api/tickets/:id/data-response', authenticateToken, async (req: AuthRe
 // ج- جلب كل طلبات البيانات لتيكت معين
 app.get('/api/tickets/:id/data-requests', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { role, userId } = req.user!;
 
     // Customers can only see their own ticket's data requests
@@ -1113,7 +1116,7 @@ app.get('/api/tickets/:id/data-requests', authenticateToken, async (req: AuthReq
 // د- اعتماد بيانات العميل (AM يوافق على البيانات)
 app.put('/api/tickets/:id/approve-intake', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { role } = req.user!;
 
     if (!['ADMIN', 'ACCOUNT_MANAGER', 'SEO'].includes(role)) {
@@ -1168,7 +1171,7 @@ app.put('/api/tickets/:id/approve-intake', authenticateToken, async (req: AuthRe
 // هـ- رفع وثيقة العمل الحر أو السجل التجاري
 app.put('/api/tickets/:id/upload-documents', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { freelanceDocUrl, commercialRegUrl } = req.body;
     const { role } = req.user!;
 
@@ -1198,7 +1201,7 @@ app.put('/api/tickets/:id/upload-documents', authenticateToken, async (req: Auth
 // أ- حفظ/تحديث مقترحات SEO (upsert)
 app.put('/api/tickets/:id/seo-proposals', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { role } = req.user!;
     if (role === 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
 
@@ -1233,7 +1236,7 @@ app.put('/api/tickets/:id/seo-proposals', authenticateToken, async (req: AuthReq
 // ب- إرسال المقترحات لمدير الحساب
 app.put('/api/tickets/:id/seo-proposals/send-to-am', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { role } = req.user!;
     if (role === 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
 
@@ -1268,7 +1271,7 @@ app.put('/api/tickets/:id/seo-proposals/send-to-am', authenticateToken, async (r
 // ج- رد مدير الحساب على المقترحات
 app.put('/api/tickets/:id/seo-proposals/am-review', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { action, notes } = req.body;
     const { role } = req.user!;
 
@@ -1305,7 +1308,7 @@ app.put('/api/tickets/:id/seo-proposals/am-review', authenticateToken, async (re
 // د- عرض المقترحات على العميل (AM يرسلها للعميل)
 app.put('/api/tickets/:id/seo-proposals/send-to-client', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { role } = req.user!;
 
     if (!['ADMIN', 'ACCOUNT_MANAGER'].includes(role)) {
@@ -1345,7 +1348,7 @@ app.put('/api/tickets/:id/seo-proposals/send-to-client', authenticateToken, asyn
 // هـ- إعادة المقترحات للـ SEO بعد طلب تعديل العميل (AM → SEO)
 app.put('/api/tickets/:id/seo-proposals/send-to-seo', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { role } = req.user!;
 
     if (!['ADMIN', 'ACCOUNT_MANAGER'].includes(role)) {
@@ -1392,7 +1395,7 @@ app.put('/api/tickets/:id/seo-proposals/send-to-seo', authenticateToken, async (
 // و- رد العميل على المقترحات
 app.put('/api/tickets/:id/seo-proposals/client-review', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { action, selectedDomain, notes } = req.body;
     const { role, userId } = req.user!;
 
@@ -1454,7 +1457,7 @@ app.put('/api/tickets/:id/seo-proposals/client-review', authenticateToken, async
 // و- اعتماد نهائي (AM يؤكد اختيارات العميل ويرسلها لـ SEO)
 app.put('/api/tickets/:id/seo-proposals/finalize', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { selectedDomain } = req.body;
     const { role } = req.user!;
 
@@ -1488,7 +1491,7 @@ app.put('/api/tickets/:id/seo-proposals/finalize', authenticateToken, async (req
 // ز- جلب المقترحات
 app.get('/api/tickets/:id/seo-proposals', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { role, userId } = req.user!;
 
     // Customers can only see their own ticket
@@ -1511,7 +1514,7 @@ app.get('/api/tickets/:id/seo-proposals', authenticateToken, async (req: AuthReq
 // ح- تحديث الخطوة الفرعية
 app.put('/api/tickets/:id/seo-substep', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { subStep } = req.body;
     const { role } = req.user!;
 
@@ -1531,7 +1534,7 @@ app.put('/api/tickets/:id/seo-substep', authenticateToken, async (req: AuthReque
 // ط- تحويل من SEO للمصمم
 app.put('/api/tickets/:id/transfer-to-designer', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { assignedDesignerId, seoBrief, customSlaHours } = req.body;
     const { role, userId } = req.user!;
 
@@ -1597,7 +1600,7 @@ app.put('/api/tickets/:id/transfer-to-designer', authenticateToken, async (req: 
 // أ- جلب بيانات التصميم
 app.get('/api/tickets/:id/design-delivery', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const delivery = await prisma.designDelivery.findFirst({
       where: { ticketId: id }, orderBy: { createdAt: 'desc' }
     });
@@ -1608,7 +1611,7 @@ app.get('/api/tickets/:id/design-delivery', authenticateToken, async (req: AuthR
 // ب- حفظ تسليم التصميم
 app.put('/api/tickets/:id/design-delivery', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { role } = req.user!;
     if (role === 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
     const { figmaLink, driveLink, images } = req.body;
@@ -1650,7 +1653,7 @@ app.post('/api/tickets/:id/design-image', authenticateToken, async (req: AuthReq
 // د- إرسال التصميم لـ SEO
 app.put('/api/tickets/:id/design-delivery/send-to-seo', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const existing = await prisma.designDelivery.findFirst({ where: { ticketId: id }, orderBy: { createdAt: 'desc' } });
     if (!existing) return res.status(404).json({ error: 'لا يوجد تسليم' });
     // Must have at least figmaLink OR images
@@ -1667,7 +1670,7 @@ app.put('/api/tickets/:id/design-delivery/send-to-seo', authenticateToken, async
 // هـ- مراجعة SEO للتصميم
 app.put('/api/tickets/:id/design-delivery/seo-review', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { action, notes } = req.body;
     const existing = await prisma.designDelivery.findFirst({ where: { ticketId: id }, orderBy: { createdAt: 'desc' } });
     if (!existing) return res.status(404).json({ error: 'لا يوجد تسليم' });
@@ -1682,7 +1685,7 @@ app.put('/api/tickets/:id/design-delivery/seo-review', authenticateToken, async 
 // و- إرسال التصميم لمدير الحساب للمراجعة (SEO → AM)
 app.put('/api/tickets/:id/design-delivery/send-to-am', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const existing = await prisma.designDelivery.findFirst({ where: { ticketId: id }, orderBy: { createdAt: 'desc' } });
     if (!existing) return res.status(404).json({ error: 'لا يوجد تسليم' });
     const d = await prisma.designDelivery.update({ where: { id: existing.id }, data: { status: 'SENT_TO_AM' } });
@@ -1695,7 +1698,7 @@ app.put('/api/tickets/:id/design-delivery/send-to-am', authenticateToken, async 
 // ز- مراجعة مدير الحساب للتصميم
 app.put('/api/tickets/:id/design-delivery/am-review', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { action, notes } = req.body;
     const { role } = req.user!;
     if (!['ADMIN', 'ACCOUNT_MANAGER'].includes(role)) return res.status(403).json({ error: 'غير مصرح' });
@@ -1712,7 +1715,7 @@ app.put('/api/tickets/:id/design-delivery/am-review', authenticateToken, async (
 // ح- إرسال التصميم للعميل
 app.put('/api/tickets/:id/design-delivery/send-to-client', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { message } = req.body;
     const existing = await prisma.designDelivery.findFirst({ where: { ticketId: id }, orderBy: { createdAt: 'desc' } });
     if (!existing) return res.status(404).json({ error: 'لا يوجد تسليم' });
@@ -1728,7 +1731,7 @@ app.put('/api/tickets/:id/design-delivery/send-to-client', authenticateToken, as
 // ز- رد العميل على التصميم
 app.put('/api/tickets/:id/design-delivery/client-review', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { action, notes, selectedImageUrl } = req.body;
     const { role, userId } = req.user!;
     if (role !== 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
@@ -1765,7 +1768,7 @@ app.put('/api/tickets/:id/design-delivery/client-review', authenticateToken, asy
 // ح- تحويل من التصميم للتطوير
 app.put('/api/tickets/:id/transfer-to-dev', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { developerId, devBrief, customSlaHours } = req.body;
     const { role, userId } = req.user!;
     if (role === 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
@@ -1792,7 +1795,7 @@ app.put('/api/tickets/:id/transfer-to-dev', authenticateToken, async (req: AuthR
 // ط- جلب مهام المطور
 app.get('/api/tickets/:id/dev-checklist', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const cl = await prisma.devChecklist.findUnique({ where: { ticketId: id } });
     res.json(cl || null);
   } catch (error: any) { res.status(500).json({ error: error.message }); }
@@ -1801,7 +1804,7 @@ app.get('/api/tickets/:id/dev-checklist', authenticateToken, async (req: AuthReq
 // ي- تحديث مهام المطور
 app.put('/api/tickets/:id/dev-checklist', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { role } = req.user!;
     if (role === 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
     const { designApplied, pagesSetup, uiTested, deliveredToSeo, isSubmittedToSeo, devBriefToSeo } = req.body;
@@ -1822,7 +1825,7 @@ app.put('/api/tickets/:id/dev-checklist', authenticateToken, async (req: AuthReq
 // ي2- إعادة تسليم المطور لـ SEO (بعد الاعتماد الأول + إعادة التحويل)
 app.put('/api/tickets/:id/dev-checklist/resubmit', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { role, userId } = req.user!;
     if (role === 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
     const { devBriefToSeo } = req.body;
@@ -1875,7 +1878,7 @@ app.put('/api/tickets/:id/dev-checklist/resubmit', authenticateToken, async (req
 // ك- مراجعة SEO لعمل المطور
 app.put('/api/tickets/:id/dev-checklist/seo-review', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { action, notes } = req.body;
     const { role, userId } = req.user!;
     if (role === 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
@@ -1898,7 +1901,7 @@ app.put('/api/tickets/:id/dev-checklist/seo-review', authenticateToken, async (r
 // أ- جلب مهام SEO النهائية
 app.get('/api/tickets/:id/seo-final', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const cl = await prisma.seoFinalChecklist.findUnique({ where: { ticketId: id } });
     res.json(cl || null);
   } catch (error: any) { res.status(500).json({ error: error.message }); }
@@ -1907,7 +1910,7 @@ app.get('/api/tickets/:id/seo-final', authenticateToken, async (req: AuthRequest
 // ب- تحديث مهام SEO النهائية
 app.put('/api/tickets/:id/seo-final', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { role } = req.user!;
     if (role === 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
     const allowed = ['paymentActivated', 'paymentTested', 'paymentGatewaysOk', 'shippingLinked', 'shippingZonesSet', 'shippingTested', 'seoHomePage', 'seoCategoriesPage', 'metaDescSet', 'finalInspection'];
@@ -1923,7 +1926,7 @@ app.put('/api/tickets/:id/seo-final', authenticateToken, async (req: AuthRequest
 // ج- إرسال لمدير الحساب
 app.put('/api/tickets/:id/seo-final/send-to-am', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { brief } = req.body;
     const cl = await prisma.seoFinalChecklist.update({
       where: { ticketId: id }, data: { status: 'SENT_TO_AM', seoBriefToAm: brief || '' }
@@ -1936,7 +1939,7 @@ app.put('/api/tickets/:id/seo-final/send-to-am', authenticateToken, async (req: 
 // د- مراجعة مدير الحساب
 app.put('/api/tickets/:id/seo-final/am-review', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { action, notes } = req.body;
     const { role } = req.user!;
     if (!['ADMIN', 'ACCOUNT_MANAGER'].includes(role)) return res.status(403).json({ error: 'غير مصرح' });
@@ -1951,7 +1954,7 @@ app.put('/api/tickets/:id/seo-final/am-review', authenticateToken, async (req: A
 // هـ- عرض على العميل
 app.put('/api/tickets/:id/seo-final/send-to-client', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { role } = req.user!;
     if (!['ADMIN', 'ACCOUNT_MANAGER'].includes(role)) return res.status(403).json({ error: 'غير مصرح' });
     const cl = await prisma.seoFinalChecklist.update({ where: { ticketId: id }, data: { status: 'SENT_TO_CLIENT' } });
@@ -1966,7 +1969,7 @@ app.put('/api/tickets/:id/seo-final/send-to-client', authenticateToken, async (r
 // و- رد العميل
 app.put('/api/tickets/:id/seo-final/client-review', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { action, notes } = req.body;
     const { role, userId } = req.user!;
     if (role !== 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
@@ -1990,7 +1993,7 @@ app.put('/api/tickets/:id/seo-final/client-review', authenticateToken, async (re
 // ══════════════════════════════════════════════════════════════
 app.get('/api/tickets/:id/final-review-summary', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const ticket = await prisma.ticket.findUnique({
       where: { id },
       include: {
@@ -2041,7 +2044,7 @@ app.get('/api/tickets/:id/final-review-summary', authenticateToken, async (req: 
 
 app.put('/api/tickets/:id/final-review', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { role } = req.user!;
     if (role !== 'CUSTOMER') return res.status(403).json({ error: 'فقط العميل يمكنه المراجعة' });
     const { action, notes } = req.body;
@@ -2077,7 +2080,7 @@ app.put('/api/tickets/:id/final-review', authenticateToken, async (req: AuthRequ
 
 app.put('/api/tickets/:id/final-delivery', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { notes } = req.body;
     const { role, userId } = req.user!;
     if (!['ADMIN', 'ACCOUNT_MANAGER'].includes(role)) return res.status(403).json({ error: 'غير مصرح' });
@@ -2102,7 +2105,7 @@ app.put('/api/tickets/:id/final-delivery', authenticateToken, async (req: AuthRe
 // ══════════════════════════════════════════════════════════════
 app.put('/api/tickets/:id/flexible-transfer', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { role, userId } = req.user!;
     if (!['ADMIN', 'ACCOUNT_MANAGER', 'SEO'].includes(role)) {
       return res.status(403).json({ error: 'غير مصرح' });
@@ -2253,7 +2256,7 @@ const STAGE_CONFIG_LABELS: Record<string, string> = {
 
 // و- تغيير المرحلة (مع تحقق INTAKE)
 app.put('/api/tickets/:id/stage', authenticateToken, async (req: AuthRequest, res) => {
-  const id = req.params['id'] as string;
+  const id = param(req.params.id);
   const stage = req.body['stage'] as string;
   const ticket = await prisma.ticket.findUnique({ where: { id } });
   if (!ticket) return res.status(404).json({ error: 'Not found' });
@@ -2348,7 +2351,7 @@ app.put('/api/tickets/:id/stage', authenticateToken, async (req: AuthRequest, re
 // ════════════════════════════════════════════════════════════════
 app.put('/api/tickets/:id/emergency-transfer', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const id = req.params['id'] as string;
+    const id = param(req.params.id);
     const { stage, reason } = req.body;
 
     // Only ADMIN
@@ -2392,7 +2395,7 @@ app.put('/api/tickets/:id/emergency-transfer', authenticateToken, async (req: Au
 });
 
 app.put('/api/tickets/:id/assign', authenticateToken, async (req: AuthRequest, res) => {
-  const id = req.params['id'] as string;
+  const id = param(req.params.id);
   const { accountManagerId, designerId, developerId } = req.body;
   const updated = await prisma.ticket.update({
     where: { id },
@@ -2407,7 +2410,7 @@ app.get('/api/staff', authenticateToken, async (req: AuthRequest, res) => {
 });
 
 app.put('/api/tickets/:id/checklist', authenticateToken, async (req: AuthRequest, res) => {
-  const id = req.params['id'] as string;
+  const id = param(req.params.id);
   const { checklist } = req.body;
   const updated = await prisma.ticket.update({ where: { id }, data: { checklists: JSON.stringify(checklist) } });
   res.json(updated);
@@ -2534,7 +2537,7 @@ app.post('/api/tickets/save-ai-proposal', authenticateToken, async (req: AuthReq
 // ── SEO Checklist: Get ─────────────────────────────────────────────────────
 app.get('/api/tickets/:id/seo-checklist', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const checklist = await prisma.seoChecklist.findUnique({ where: { ticketId: id } });
     res.json(checklist || null);
   } catch (error: any) {
@@ -2545,7 +2548,7 @@ app.get('/api/tickets/:id/seo-checklist', authenticateToken, async (req: AuthReq
 // ── SEO Checklist: Upsert ──────────────────────────────────────────────────
 app.put('/api/tickets/:id/seo-checklist', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const data = req.body;
 
     console.log('[SEO PUT] ticketId:', id);
@@ -2650,7 +2653,7 @@ app.put('/api/logo-types/:id', authenticateToken, async (req: AuthRequest, res) 
     if (imageUrl !== undefined) data.imageUrl = imageUrl || null;
     if (isActive !== undefined) data.isActive = isActive;
     if (sortOrder !== undefined) data.sortOrder = sortOrder;
-    const updated = await prisma.logoType.update({ where: { id: req.params.id }, data });
+    const updated = await prisma.logoType.update({ where: { id: param(req.params.id) }, data });
     res.json(updated);
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
@@ -2659,7 +2662,7 @@ app.put('/api/logo-types/:id', authenticateToken, async (req: AuthRequest, res) 
 app.delete('/api/logo-types/:id', authenticateToken, async (req: AuthRequest, res) => {
   if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'غير مصرح' });
   try {
-    await prisma.logoType.delete({ where: { id: req.params.id } });
+    await prisma.logoType.delete({ where: { id: param(req.params.id) } });
     res.json({ success: true });
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
@@ -2721,7 +2724,7 @@ app.put('/api/product-suppliers/:id', authenticateToken, async (req: AuthRequest
     if (imageUrl !== undefined) data.imageUrl = imageUrl || null;
     if (isActive !== undefined) data.isActive = isActive;
     if (sortOrder !== undefined) data.sortOrder = sortOrder;
-    const updated = await prisma.productSupplier.update({ where: { id: req.params.id }, data });
+    const updated = await prisma.productSupplier.update({ where: { id: param(req.params.id) }, data });
     res.json(updated);
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
@@ -2730,7 +2733,7 @@ app.put('/api/product-suppliers/:id', authenticateToken, async (req: AuthRequest
 app.delete('/api/product-suppliers/:id', authenticateToken, async (req: AuthRequest, res) => {
   if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'غير مصرح' });
   try {
-    await prisma.productSupplier.delete({ where: { id: req.params.id } });
+    await prisma.productSupplier.delete({ where: { id: param(req.params.id) } });
     res.json({ success: true });
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
@@ -2753,7 +2756,7 @@ app.put('/api/product-suppliers/reorder', authenticateToken, async (req: AuthReq
 // GET product supplier selection for a ticket
 app.get('/api/tickets/:id/product-supplier', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { role, userId } = req.user!;
     if (role === 'CUSTOMER') {
       const ticket = await prisma.ticket.findFirst({ where: { id, customerId: userId } });
@@ -2767,7 +2770,7 @@ app.get('/api/tickets/:id/product-supplier', authenticateToken, async (req: Auth
 // PUT send suppliers to client
 app.put('/api/tickets/:id/product-supplier/send-to-client', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { role } = req.user!;
     if (!['ADMIN', 'ACCOUNT_MANAGER', 'SEO'].includes(role)) return res.status(403).json({ error: 'غير مصرح' });
     const ticket = await prisma.ticket.findUnique({ where: { id } });
@@ -2787,7 +2790,7 @@ app.put('/api/tickets/:id/product-supplier/send-to-client', authenticateToken, a
 // PUT client selects a supplier
 app.put('/api/tickets/:id/product-supplier/client-select', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { role, userId } = req.user!;
     if (role !== 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
     const ticket = await prisma.ticket.findFirst({ where: { id, customerId: userId } });
@@ -2810,7 +2813,7 @@ app.put('/api/tickets/:id/product-supplier/client-select', authenticateToken, as
 // PUT upload product file/link
 app.put('/api/tickets/:id/product-supplier/upload', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { role } = req.user!;
     if (!['ADMIN', 'ACCOUNT_MANAGER', 'SEO'].includes(role)) return res.status(403).json({ error: 'غير مصرح' });
     const { productFileUrl, productLink } = req.body;
@@ -2845,7 +2848,7 @@ app.post('/api/tickets/:id/product-file', authenticateToken, async (req: AuthReq
 // PUT client reviews the product file (APPROVE / REVISION)
 app.put('/api/tickets/:id/product-supplier/client-file-review', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { role, userId } = req.user!;
     if (role !== 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
     const ticket = await prisma.ticket.findFirst({ where: { id, customerId: userId } });
@@ -2881,7 +2884,7 @@ app.put('/api/tickets/:id/product-supplier/client-file-review', authenticateToke
 // PUT SEO/AM finalizes the product supplier selection
 app.put('/api/tickets/:id/product-supplier/finalize', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { id } = req.params;
+    const id = param(req.params.id);
     const { role } = req.user!;
     if (!['ADMIN', 'ACCOUNT_MANAGER', 'SEO'].includes(role)) return res.status(403).json({ error: 'غير مصرح' });
     const selection = await prisma.productSupplierSelection.update({
