@@ -1820,7 +1820,7 @@ export function CustomerDashboard() {
             )}
 
             {/* 📋 FINAL REVIEW — Client reviews all details before delivery */}
-            {ticket.finalReviewStatus && (
+            {ticket.finalReviewStatus && token && (
               <FinalReviewCustomerSection ticket={ticket} token={token} />
             )}
 
