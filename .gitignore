@@ -45,6 +45,7 @@ coverage/
 # Prisma
 prisma/*.db
 frontend/.env.development 
+frontend/.env
 backend/prisma/dev.db 
 backend/.env 
 backend/uploads/ 

@@ -6,6 +6,7 @@ import { StaffDashboard } from './pages/admin/StaffDashboard';
 import { ManageStaff } from './pages/admin/ManageStaff';
 import { ReportsDashboard } from './pages/admin/ReportsDashboard';
 import { AdminSettings } from './pages/admin/AdminSettings';
+import { AddClient } from './pages/admin/AddClient';
 import { Login } from './pages/auth/Login';
 import { CustomerDashboard } from './pages/customer/CustomerDashboard';
 import { useAuthStore } from './store/useAuthStore';
@@ -82,6 +83,7 @@ function App() {
             <Route path="staff" element={<ManageStaff />} />
             <Route path="reports" element={<ReportsDashboard />} />
             <Route path="settings" element={<AdminSettings />} />
+            <Route path="add-client" element={<AddClient />} />
           </Route>
         </Routes>
       </BrowserRouter>

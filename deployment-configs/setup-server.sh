@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # ══════════════════════════════════════════════════════════════════════════════
-#  Fawri.net — Full-Stack Deployment Script
-#  Server:  Ubuntu 22.04 (Hostinger KVM 2)
-#  Domain:  fawri.net
-#  IP:      72.62.46.104
+#  capsystem.net — Full-Stack Deployment Script
+#  Server:  Ubuntu 22.04+ (AWS EC2)
+#  Domain:  capsystem.net
 # ══════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
 
@@ -46,7 +45,7 @@ fi
 # ══════════════════════════════════════════════════════════════════════════════
 #  STEP 2: Project Setup
 # ══════════════════════════════════════════════════════════════════════════════
-PROJECT_DIR="/var/www/fawri"
+PROJECT_DIR="/var/www/capsystem"
 
 # ── Clone repository ──────────────────────────────────────────────────────────
 if [ ! -d "$PROJECT_DIR" ]; then
@@ -56,7 +55,7 @@ if [ ! -d "$PROJECT_DIR" ]; then
     # ╔══════════════════════════════════════════════════════════════════════╗
     # ║  REPLACE THIS URL WITH YOUR ACTUAL GIT REPOSITORY                  ║
     # ╚══════════════════════════════════════════════════════════════════════╝
-    git clone https://github.com/ahmedhelm-y/Salla-Task-Manager.git "$PROJECT_DIR"
+    git clone https://github.com/YOUR_ORG/3-pearl.git "$PROJECT_DIR"
 else
     log "Project directory exists. Pulling latest code..."
     cd "$PROJECT_DIR" && git pull origin main
@@ -83,13 +82,12 @@ if [ ! -f .env ]; then
     echo "║  nano $PROJECT_DIR/backend/.env                    ║"
     echo "║                                                                ║"
     echo "║  Required changes:                                             ║"
-    echo "║  • DATABASE_URL     → your Supabase connection string          ║"
-    echo "║  • DIRECT_URL       → your Supabase direct connection          ║"
+    echo "║  • DATABASE_URL     → your database connection string          ║"
     echo "║  • JWT_SECRET       → a strong random string (64+ chars)       ║"
     echo "║  • GEMINI_API_KEY   → your Google AI API key                   ║"
     echo "║  • ENCRYPTION_KEY   → a strong 32-char key                     ║"
-    echo "║  • FRONTEND_URL     → https://fawri.net                        ║"
-    echo "║  • BASE_URL         → https://fawri.net                        ║"
+    echo "║  • FRONTEND_URL     → https://capsystem.net                    ║"
+    echo "║  • BASE_URL         → https://capsystem.net                    ║"
     echo "╚══════════════════════════════════════════════════════════════════╝"
     echo ""
 else
@@ -99,6 +97,9 @@ fi
 # ── Generate Prisma client & Build TypeScript ─────────────────────────────────
 log "Generating Prisma client..."
 npx prisma generate
+
+log "Pushing database schema..."
+npx prisma db push
 
 log "Building backend TypeScript..."
 npm run build
@@ -116,7 +117,7 @@ npm install
 # ── Create production .env ────────────────────────────────────────────────────
 if [ ! -f .env ]; then
     log "Creating frontend .env for production..."
-    echo 'VITE_API_URL=https://fawri.net' > .env
+    echo 'VITE_API_URL=https://capsystem.net' > .env
 else
     log "Frontend .env already exists."
 fi
@@ -130,10 +131,10 @@ npm run build
 log "Configuring Nginx..."
 
 # ── Copy our config ───────────────────────────────────────────────────────────
-sudo cp "$PROJECT_DIR/deployment-configs/nginx.conf" /etc/nginx/sites-available/fawri.net
+sudo cp "$PROJECT_DIR/deployment-configs/nginx.conf" /etc/nginx/sites-available/capsystem.net
 
 # ── Enable the site ───────────────────────────────────────────────────────────
-sudo ln -sf /etc/nginx/sites-available/fawri.net /etc/nginx/sites-enabled/fawri.net
+sudo ln -sf /etc/nginx/sites-available/capsystem.net /etc/nginx/sites-enabled/capsystem.net
 
 # ── Remove default site ───────────────────────────────────────────────────────
 sudo rm -f /etc/nginx/sites-enabled/default
@@ -141,11 +142,11 @@ sudo rm -f /etc/nginx/sites-enabled/default
 # ── Test config before reload ─────────────────────────────────────────────────
 # NOTE: Nginx test will fail until SSL certs exist. We'll get certs next.
 # For now, temporarily use HTTP-only config for cert generation.
-sudo tee /etc/nginx/sites-available/fawri-temp.conf > /dev/null <<'EOF'
+sudo tee /etc/nginx/sites-available/capsystem-temp.conf > /dev/null <<'EOF'
 server {
     listen 80;
-    server_name fawri.net www.fawri.net;
-    root /var/www/fawri/frontend/dist;
+    server_name capsystem.net www.capsystem.net;
+    root /var/www/capsystem/frontend/dist;
     index index.html;
     location / { try_files $uri $uri/ /index.html; }
     location /api/ {
@@ -158,13 +159,13 @@ server {
         client_max_body_size 50M;
     }
     location /uploads/ {
-        alias /var/www/fawri/backend/uploads/;
+        alias /var/www/capsystem/backend/uploads/;
         try_files $uri =404;
     }
 }
 EOF
 
-sudo ln -sf /etc/nginx/sites-available/fawri-temp.conf /etc/nginx/sites-enabled/fawri.net
+sudo ln -sf /etc/nginx/sites-available/capsystem-temp.conf /etc/nginx/sites-enabled/capsystem.net
 sudo nginx -t && sudo systemctl reload nginx
 log "Nginx started with temporary HTTP config."
 
@@ -173,16 +174,16 @@ log "Nginx started with temporary HTTP config."
 # ══════════════════════════════════════════════════════════════════════════════
 log "Obtaining SSL certificate with Certbot..."
 echo ""
-warn "Make sure your DNS A records point to 72.62.46.104 BEFORE running this!"
-echo "  fawri.net     → 72.62.46.104"
-echo "  www.fawri.net → 72.62.46.104"
+warn "Make sure your DNS A records point to your AWS EC2 IP BEFORE running this!"
+echo "  capsystem.net     → YOUR_EC2_IP"
+echo "  www.capsystem.net → YOUR_EC2_IP"
 echo ""
 
-sudo certbot --nginx -d fawri.net -d www.fawri.net --non-interactive --agree-tos --email admin@fawri.net --redirect
+sudo certbot --nginx -d capsystem.net -d www.capsystem.net --non-interactive --agree-tos --email admin@capsystem.net --redirect
 
 # ── Now replace temp config with full production config ───────────────────────
-sudo cp "$PROJECT_DIR/deployment-configs/nginx.conf" /etc/nginx/sites-available/fawri.net
-sudo ln -sf /etc/nginx/sites-available/fawri.net /etc/nginx/sites-enabled/fawri.net
+sudo cp "$PROJECT_DIR/deployment-configs/nginx.conf" /etc/nginx/sites-available/capsystem.net
+sudo ln -sf /etc/nginx/sites-available/capsystem.net /etc/nginx/sites-enabled/capsystem.net
 sudo nginx -t && sudo systemctl reload nginx
 log "Nginx configured with full SSL production config."
 
@@ -196,7 +197,7 @@ cd "$PROJECT_DIR"
 cp deployment-configs/ecosystem.config.js .
 
 # ── Start/Restart the process ─────────────────────────────────────────────────
-pm2 delete fawri-backend 2>/dev/null || true
+pm2 delete capsystem-backend 2>/dev/null || true
 pm2 start ecosystem.config.js --env production
 pm2 save
 
@@ -206,7 +207,14 @@ sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u $USER --hp /home/$USER
 pm2 save
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  STEP 8: Firewall Configuration
+#  STEP 8: Seed Staff Users
+# ══════════════════════════════════════════════════════════════════════════════
+log "Seeding staff users..."
+curl -s -X POST http://localhost:5000/api/seed-staff | head -c 200
+echo ""
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  STEP 9: Firewall Configuration
 # ══════════════════════════════════════════════════════════════════════════════
 log "Configuring firewall..."
 sudo ufw allow OpenSSH
@@ -221,18 +229,18 @@ echo "╔═══════════════════════�
 echo "║                                                                    ║"
 echo "║   🚀  DEPLOYMENT COMPLETE!                                        ║"
 echo "║                                                                    ║"
-echo "║   Frontend:  https://fawri.net                                     ║"
-echo "║   Backend:   https://fawri.net/api/health                          ║"
-echo "║   PM2 Logs:  pm2 logs fawri-backend                               ║"
+echo "║   Frontend:  https://capsystem.net                                 ║"
+echo "║   Backend:   https://capsystem.net/api/health                      ║"
+echo "║   PM2 Logs:  pm2 logs capsystem-backend                           ║"
 echo "║   PM2 Status: pm2 status                                          ║"
 echo "║                                                                    ║"
 echo "║   ─────────────────────────────────────────────────────────────    ║"
 echo "║   Useful Commands:                                                 ║"
-echo "║   • pm2 restart fawri-backend     → Restart backend               ║"
-echo "║   • pm2 logs fawri-backend        → View live logs                 ║"
-echo "║   • sudo nginx -t                 → Test Nginx config              ║"
-echo "║   • sudo systemctl reload nginx   → Reload Nginx                   ║"
-echo "║   • sudo certbot renew --dry-run  → Test SSL auto-renewal          ║"
+echo "║   • pm2 restart capsystem-backend   → Restart backend             ║"
+echo "║   • pm2 logs capsystem-backend      → View live logs               ║"
+echo "║   • sudo nginx -t                   → Test Nginx config            ║"
+echo "║   • sudo systemctl reload nginx     → Reload Nginx                 ║"
+echo "║   • sudo certbot renew --dry-run    → Test SSL auto-renewal        ║"
 echo "║                                                                    ║"
 echo "╚══════════════════════════════════════════════════════════════════════╝"
 echo ""
@@ -242,7 +250,7 @@ cat > "$PROJECT_DIR/deploy-update.sh" << 'DEPLOY_EOF'
 #!/usr/bin/env bash
 # Quick re-deploy after pushing code changes
 set -euo pipefail
-cd /var/www/fawri
+cd /var/www/capsystem
 echo "📦 Pulling latest code..."
 git pull origin main
 echo "🔧 Building backend..."
@@ -250,8 +258,8 @@ cd backend && npm install && npx prisma generate && npm run build && cd ..
 echo "🎨 Building frontend..."
 cd frontend && npm install && npm run build && cd ..
 echo "🔄 Restarting backend..."
-pm2 restart fawri-backend
-echo "✅ Deploy complete! Check: https://fawri.net"
+pm2 restart capsystem-backend
+echo "✅ Deploy complete! Check: https://capsystem.net"
 DEPLOY_EOF
 chmod +x "$PROJECT_DIR/deploy-update.sh"
 log "Created quick-deploy script at $PROJECT_DIR/deploy-update.sh"

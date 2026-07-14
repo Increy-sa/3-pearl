@@ -40,8 +40,8 @@ const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:5173',
   'http://localhost:5173',
   'http://localhost:5174',
-  'https://fawri.net',
-  'https://www.fawri.net',
+  'https://capsystem.net',
+  'https://www.capsystem.net',
 ].filter(Boolean);
 
 const corsOptions = {
@@ -267,7 +267,7 @@ app.post('/api/tickets/create-with-ai', async (req, res) => {
       }
 
       // ── Re-link ticket so dashboard always reads the updated ClientInfo ─────
-      // The Adtopia webhook may have created a separate ClientInfo and linked the
+      // The ThreePearl webhook may have created a separate ClientInfo and linked the
       // ticket to it. Update the ticket's clientId to point to this record so
       // the dashboard's /api/customer/my-ticket returns the correct client data.
       const user = await prisma.user.findUnique({ where: { email: email as string } });
@@ -1669,6 +1669,7 @@ app.put('/api/tickets/:id/design-delivery/send-to-seo', authenticateToken, async
 
 // هـ- مراجعة SEO للتصميم
 app.put('/api/tickets/:id/design-delivery/seo-review', authenticateToken, async (req: AuthRequest, res) => {
+  // Allow ADMIN, ACCOUNT_MANAGER, and SEO to review designs
   try {
     const id = param(req.params.id);
     const { action, notes } = req.body;
@@ -1705,9 +1706,17 @@ app.put('/api/tickets/:id/design-delivery/am-review', authenticateToken, async (
     const existing = await prisma.designDelivery.findFirst({ where: { ticketId: id }, orderBy: { createdAt: 'desc' } });
     if (!existing) return res.status(404).json({ error: 'لا يوجد تسليم' });
     if (action === 'APPROVE') {
-      res.json(await prisma.designDelivery.update({ where: { id: existing.id }, data: { status: 'AM_APPROVED', amNotes: null } }));
+      // AM approves — still needs to explicitly send to client via client action
+      const d = await prisma.designDelivery.update({ where: { id: existing.id }, data: { status: 'AM_APPROVED', amNotes: null } });
+      res.json(d);
     } else if (action === 'REVISION') {
-      res.json(await prisma.designDelivery.update({ where: { id: existing.id }, data: { status: 'AM_REVISION', amNotes: notes || '' } }));
+      const d = await prisma.designDelivery.update({ where: { id: existing.id }, data: { status: 'AM_REVISION', amNotes: notes || '' } });
+      // Notify designer about revision
+      const ticket = await prisma.ticket.findUnique({ where: { id } });
+      if (ticket?.designerId) {
+        await prisma.notification.create({ data: { userId: ticket.designerId, ticketId: id, title: '⚠️ طلب تعديل على التصميم', message: notes ? `ملاحظات: ${notes}` : 'مدير الحساب طلب تعديل على التصميم.', isPriority: true } }).catch(() => {});
+      }
+      res.json(d);
     } else { res.status(400).json({ error: 'إجراء غير صالح' }); }
   } catch (error: any) { res.status(500).json({ error: error.message }); }
 });
@@ -1882,6 +1891,7 @@ app.put('/api/tickets/:id/dev-checklist/seo-review', authenticateToken, async (r
     const { action, notes } = req.body;
     const { role, userId } = req.user!;
     if (role === 'CUSTOMER') return res.status(403).json({ error: 'غير مصرح' });
+    // ADMIN, ACCOUNT_MANAGER, SEO can all review dev work
     const cl = await prisma.devChecklist.findUnique({ where: { ticketId: id } });
     if (!cl) return res.status(404).json({ error: 'لا توجد بيانات' });
     if (action === 'APPROVE') {
@@ -2107,7 +2117,7 @@ app.put('/api/tickets/:id/flexible-transfer', authenticateToken, async (req: Aut
   try {
     const id = param(req.params.id);
     const { role, userId } = req.user!;
-    if (!['ADMIN', 'ACCOUNT_MANAGER', 'SEO'].includes(role)) {
+    if (role === 'CUSTOMER') {
       return res.status(403).json({ error: 'غير مصرح' });
     }
     const { targetStage, assigneeId, brief, clientAction, clientMessage, customSlaHours } = req.body;
@@ -2115,7 +2125,29 @@ app.put('/api/tickets/:id/flexible-transfer', authenticateToken, async (req: Aut
     if (!ticket) return res.status(404).json({ error: 'الطلب غير موجود' });
 
     // ── Client Action (no stage change) ──
+
+    // Handle ASSIGN_AM separately (not a client-facing action)
+    if (clientAction === 'ASSIGN_AM') {
+      const { assigneeId: amId, brief: amBrief } = req.body;
+      if (!amId) return res.status(400).json({ error: 'يجب اختيار مدير الحساب' });
+      await prisma.ticket.update({ where: { id }, data: { accountManagerId: amId, stage: 'INTAKE', stageEnteredAt: new Date(), isSlaBreached: false, staffAcceptedAt: null } });
+      await prisma.notification.create({
+        data: { userId: amId, ticketId: id, title: '📋 تم تعيينك كمدير حساب', message: amBrief?.trim() || 'تم تعيينك كمدير حساب لهذا الطلب.', isPriority: true }
+      }).catch(() => { });
+      const { assigneeName: amName, assigneeRole: amRole, fromStage: amFromStage } = req.body;
+      await prisma.auditLog.create({
+        data: { ticketId: id, userId, action: 'ASSIGNED_AM', details: JSON.stringify({ assigneeId: amId, brief: amBrief?.trim(), assigneeName: amName, assigneeRole: amRole, from: amFromStage || ticket.stage, to: 'ACCOUNT_MANAGER' }) }
+      }).catch(() => { });
+      return res.json({ success: true, action: 'ASSIGN_AM' });
+    }
+
+    // Client-facing actions (gated by restrictClientView)
     if (clientAction) {
+      // Check restrictClientView setting
+      const settings = await prisma.appSettings.findUnique({ where: { id: 'default' } });
+      if (settings?.restrictClientView && !['ADMIN', 'ACCOUNT_MANAGER'].includes(role)) {
+        return res.status(403).json({ error: 'غير مصرح لك بالعرض على العميل. هذه الصلاحية مقيّدة لمدير الحساب والأدمن فقط.' });
+      }
       if (clientAction === 'SHOW_DESIGNS') {
         const dd = await prisma.designDelivery.findFirst({ where: { ticketId: id }, orderBy: { createdAt: 'desc' } });
         if (!dd) return res.status(400).json({ error: 'لا يوجد تصميم لعرضه على العميل' });
@@ -2142,19 +2174,6 @@ app.put('/api/tickets/:id/flexible-transfer', authenticateToken, async (req: Aut
         }
         return res.json({ success: true, action: 'REQUEST_DATA' });
       }
-      if (clientAction === 'ASSIGN_AM') {
-        const { assigneeId: amId, brief: amBrief } = req.body;
-        if (!amId) return res.status(400).json({ error: 'يجب اختيار مدير الحساب' });
-        await prisma.ticket.update({ where: { id }, data: { accountManagerId: amId } });
-        await prisma.notification.create({
-          data: { userId: amId, ticketId: id, title: '📋 تم تعيينك كمدير حساب', message: amBrief?.trim() || 'تم تعيينك كمدير حساب لهذا الطلب.', isPriority: true }
-        }).catch(() => { });
-        const { assigneeName: amName, assigneeRole: amRole, fromStage: amFromStage } = req.body;
-        await prisma.auditLog.create({
-          data: { ticketId: id, userId, action: 'ASSIGNED_AM', details: JSON.stringify({ assigneeId: amId, brief: amBrief?.trim(), assigneeName: amName, assigneeRole: amRole, from: amFromStage || ticket.stage, to: 'ACCOUNT_MANAGER' }) }
-        }).catch(() => { });
-        return res.json({ success: true, action: 'ASSIGN_AM' });
-      }
       if (clientAction === 'SHOW_SUPPLIERS') {
         await prisma.productSupplierSelection.upsert({
           where: { ticketId: id },
@@ -2169,7 +2188,7 @@ app.put('/api/tickets/:id/flexible-transfer', authenticateToken, async (req: Aut
       if (clientAction === 'SHOW_PRODUCT_FILE') {
         const pss = await prisma.productSupplierSelection.findUnique({ where: { ticketId: id } });
         if (!pss || (!pss.productFileUrl && !pss.productLink)) return res.status(400).json({ error: 'لا يوجد ملف أو رابط منتجات لعرضه على العميل. ارفع الملف أولاً.' });
-        await prisma.productSupplierSelection.update({ where: { ticketId: id }, data: { status: 'SENT_FILE_TO_CLIENT' } });
+        await prisma.productSupplierSelection.update({ where: { ticketId: id }, data: { status: 'SENT_FILE_TO_CLIENT', staffMessage: clientMessage?.trim() || null, clientNotes: null } });
         if (ticket.customerId) {
           await prisma.notification.create({ data: { userId: ticket.customerId, ticketId: id, title: '📦 ملف المنتجات جاهز', message: clientMessage || 'تم إعداد ملف المنتجات لمتجرك. يرجى المراجعة والاعتماد.', isPriority: true } });
         }
@@ -2240,6 +2259,16 @@ app.put('/api/tickets/:id/flexible-transfer', authenticateToken, async (req: Aut
     if (assigneeId) {
       await prisma.notification.create({
         data: { userId: assigneeId, ticketId: id, title: `📋 مهمة جديدة - ${STAGE_CONFIG_LABELS[targetStage] || targetStage}`, message: brief?.trim() || 'تم تعيينك على هذا الطلب.', isPriority: true }
+      }).catch(() => { });
+    }
+
+    // Also notify AM when SEO/Designer/Developer completes and transfers
+    const senderRole = req.user!.role;
+    if (['SEO', 'DESIGNER', 'DEVELOPER'].includes(senderRole) && ticket.accountManagerId && ticket.accountManagerId !== assigneeId) {
+      const ROLE_LABELS_AR: Record<string, string> = { SEO: 'فريق SEO', DESIGNER: 'المصمم', DEVELOPER: 'المطور' };
+      const senderLabel = ROLE_LABELS_AR[senderRole] || senderRole;
+      await prisma.notification.create({
+        data: { userId: ticket.accountManagerId, ticketId: id, title: `✅ ${senderLabel} أنهى مهامه`, message: brief?.trim() || `${senderLabel} أكمل العمل وحوّل الطلب.`, isPriority: true }
       }).catch(() => { });
     }
 
@@ -2409,6 +2438,30 @@ app.get('/api/staff', authenticateToken, async (req: AuthRequest, res) => {
   res.json(staff);
 });
 
+// ── App Settings API ──────────────────────────────────────────
+app.get('/api/settings/app', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    let settings = await prisma.appSettings.findUnique({ where: { id: 'default' } });
+    if (!settings) {
+      settings = await prisma.appSettings.create({ data: { id: 'default', restrictClientView: false } });
+    }
+    res.json(settings);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/settings/app', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'غير مصرح — ADMIN فقط' });
+    const { restrictClientView } = req.body;
+    const settings = await prisma.appSettings.upsert({
+      where: { id: 'default' },
+      create: { id: 'default', restrictClientView: !!restrictClientView },
+      update: { restrictClientView: !!restrictClientView },
+    });
+    res.json(settings);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
 app.put('/api/tickets/:id/checklist', authenticateToken, async (req: AuthRequest, res) => {
   const id = param(req.params.id);
   const { checklist } = req.body;
@@ -2418,11 +2471,52 @@ app.put('/api/tickets/:id/checklist', authenticateToken, async (req: AuthRequest
 
 // Notifications
 app.get('/api/notifications', authenticateToken, async (req: AuthRequest, res) => {
+  const take = Number(req.query.limit) || 50;
   const notifications = await prisma.notification.findMany({
     where: { OR: [{ userId: req.user!.userId }, { role: req.user!.role }] },
-    orderBy: { createdAt: 'desc' }
+    orderBy: { createdAt: 'desc' },
+    take,
   });
-  res.json(notifications);
+  // Add shortId for display
+  const mapped = notifications.map(n => ({
+    ...n,
+    shortId: n.ticketId ? n.ticketId.slice(0, 8) : null,
+  }));
+  res.json(mapped);
+});
+
+// Unread count
+app.get('/api/notifications/unread-count', authenticateToken, async (req: AuthRequest, res) => {
+  const count = await prisma.notification.count({
+    where: {
+      isRead: false,
+      OR: [{ userId: req.user!.userId }, { role: req.user!.role }],
+    },
+  });
+  res.json({ count });
+});
+
+// Mark single notification as read
+app.put('/api/notifications/:notifId/read', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const notifId = (req as any).params?.notifId || req.params?.notifId;
+    await prisma.notification.update({ where: { id: notifId }, data: { isRead: true } });
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// Mark all notifications as read for current user
+app.put('/api/notifications/mark-all-read', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    await prisma.notification.updateMany({
+      where: {
+        isRead: false,
+        OR: [{ userId: req.user!.userId }, { role: req.user!.role }],
+      },
+      data: { isRead: true },
+    });
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
 // Admin: Staff CRUD
@@ -2861,7 +2955,7 @@ app.put('/api/tickets/:id/product-supplier/client-file-review', authenticateToke
         where: { ticketId: id },
         data: { status: 'CLIENT_APPROVED_FILE', clientNotes: notes?.trim() || null },
       });
-      const notifyUsers = [ticket.seoSpecialistId, ticket.accountManagerId].filter(Boolean) as string[];
+      const notifyUsers = [...new Set([ticket.seoSpecialistId, ticket.accountManagerId, ticket.developerId].filter(Boolean))] as string[];
       for (const uid of notifyUsers) {
         await prisma.notification.create({ data: { userId: uid, ticketId: id, title: '✅ العميل اعتمد ملف المنتجات', message: 'تم اعتماد ملف المنتجات من العميل.', isPriority: true } }).catch(() => { });
       }
@@ -2872,7 +2966,7 @@ app.put('/api/tickets/:id/product-supplier/client-file-review', authenticateToke
         where: { ticketId: id },
         data: { status: 'CLIENT_REVISION_FILE', clientNotes: notes.trim() },
       });
-      const notifyUsers = [ticket.seoSpecialistId, ticket.accountManagerId].filter(Boolean) as string[];
+      const notifyUsers = [...new Set([ticket.seoSpecialistId, ticket.accountManagerId, ticket.developerId].filter(Boolean))] as string[];
       for (const uid of notifyUsers) {
         await prisma.notification.create({ data: { userId: uid, ticketId: id, title: '🔄 طلب تعديل على ملف المنتجات', message: `ملاحظات العميل: ${notes.trim()}`, isPriority: true } }).catch(() => { });
       }
@@ -2892,6 +2986,238 @@ app.put('/api/tickets/:id/product-supplier/finalize', authenticateToken, async (
       data: { status: 'FINALIZED' },
     });
     res.json(selection);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Manual Client Creation (ADMIN / ACCOUNT_MANAGER only) ─────────────────
+app.post('/api/tickets/create-manual', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const userRole = req.user?.role;
+    if (!['ADMIN', 'ACCOUNT_MANAGER'].includes(userRole || '')) {
+      return res.status(403).json({ error: 'غير مصرح لك بتنفيذ هذا الإجراء' });
+    }
+
+    const { firstName, lastName, email, phone, password, serviceName, amount, paymentMethod } = req.body;
+
+    if (!firstName || !lastName || !email || !phone || !password) {
+      return res.status(400).json({ error: 'جميع الحقول المطلوبة يجب تعبئتها' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 6 حروف على الأقل' });
+    }
+
+    // Check duplicate email
+    const existing = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+    if (existing) {
+      return res.status(409).json({ error: 'البريد الإلكتروني مسجل مسبقاً' });
+    }
+
+    const fullName = `${firstName.trim()} ${lastName.trim()}`;
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create CUSTOMER user
+    const newUser = await prisma.user.create({
+      data: {
+        name: fullName,
+        email: email.trim().toLowerCase(),
+        passwordHash: hashedPassword,
+        role: 'CUSTOMER',
+        isActive: true,
+      },
+    });
+
+    // Create ClientInfo
+    const client = await prisma.clientInfo.create({
+      data: {
+        customerName: fullName,
+        email: email.trim().toLowerCase(),
+        phone: phone.trim(),
+        businessName: serviceName || 'غير محدد',
+        industry: 'غير محدد',
+        description: serviceName ? `إضافة يدوية — ${serviceName}` : 'إضافة يدوية من الداشبورد',
+        targetAudience: 'غير محدد',
+        hasLegalDoc: false,
+      },
+    });
+
+    // Build staffNotes
+    const noteLines = ['📋 إضافة يدوية من الداشبورد'];
+    if (serviceName) noteLines.push(`📦 خدمة: ${serviceName}`);
+    if (amount) noteLines.push(`💰 المبلغ: ${amount}`);
+    if (paymentMethod) noteLines.push(`💳 طريقة الدفع: ${paymentMethod}`);
+
+    // Create Ticket
+    const ticket = await prisma.ticket.create({
+      data: {
+        stage: 'INTAKE',
+        stageEnteredAt: new Date(),
+        checklists: '[]',
+        clientId: client.id,
+        customerId: newUser.id,
+        staffNotes: noteLines.join('\n'),
+      },
+    });
+
+    // Audit Log
+    await prisma.auditLog.create({
+      data: {
+        action: 'MANUAL_CLIENT_CREATED',
+        ticketId: ticket.id,
+        userId: req.user!.userId,
+        details: JSON.stringify({ email, fullName, serviceName, amount, paymentMethod }),
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'تم إضافة العميل بنجاح',
+      data: { userId: newUser.id, ticketId: ticket.id, stage: ticket.stage },
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── DYNAMIC TASK MANAGEMENT ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// GET /api/task-templates — Active only (any staff)
+app.get('/api/task-templates', authenticateToken, async (_req: AuthRequest, res) => {
+  try {
+    const templates = await prisma.taskTemplate.findMany({
+      where: { isActive: true },
+      orderBy: [{ category: 'asc' }, { sortOrder: 'asc' }],
+    });
+    res.json(templates);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/task-templates/all — All including inactive (ADMIN only)
+app.get('/api/task-templates/all', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'Forbidden' });
+    const templates = await prisma.taskTemplate.findMany({
+      orderBy: [{ category: 'asc' }, { sortOrder: 'asc' }],
+    });
+    res.json(templates);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/task-templates/by-category/:cat
+app.get('/api/task-templates/by-category/:cat', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const cat = (req as any).params?.cat || req.params?.cat;
+    const templates = await prisma.taskTemplate.findMany({
+      where: { category: cat, isActive: true },
+      orderBy: { sortOrder: 'asc' },
+    });
+    res.json(templates);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/task-templates — Create (ADMIN only)
+app.post('/api/task-templates', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'Forbidden' });
+    const { name, category, group, groupIcon, sortOrder, isRequired } = req.body;
+    if (!name || !category) return res.status(400).json({ error: 'الاسم والتصنيف مطلوبان' });
+    const template = await prisma.taskTemplate.create({
+      data: { name, category, group: group || null, groupIcon: groupIcon || null, sortOrder: sortOrder || 0, isRequired: isRequired !== false },
+    });
+    res.status(201).json(template);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/task-templates/:id — Update (ADMIN only)
+app.put('/api/task-templates/:id', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'Forbidden' });
+    const id = (req as any).params?.id || req.params?.id;
+    const template = await prisma.taskTemplate.update({ where: { id }, data: req.body });
+    res.json(template);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/task-templates/:id — Delete (ADMIN only)
+app.delete('/api/task-templates/:id', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'Forbidden' });
+    const id = (req as any).params?.id || req.params?.id;
+    await prisma.taskCompletion.deleteMany({ where: { taskTemplateId: id } });
+    await prisma.taskTemplate.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/task-templates/reorder — Reorder (ADMIN only)
+app.put('/api/task-templates/reorder', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    if (req.user?.role !== 'ADMIN') return res.status(403).json({ error: 'Forbidden' });
+    const { items } = req.body; // [{ id, sortOrder }]
+    if (!Array.isArray(items)) return res.status(400).json({ error: 'items array required' });
+    for (const item of items) {
+      await prisma.taskTemplate.update({ where: { id: item.id }, data: { sortOrder: item.sortOrder } });
+    }
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/tickets/:id/tasks — Get all tasks for a ticket with completion status (grouped by category)
+app.get('/api/tickets/:id/tasks', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const id = (req as any).params?.id || req.params?.id;
+    const templates = await prisma.taskTemplate.findMany({
+      where: { isActive: true },
+      orderBy: [{ category: 'asc' }, { sortOrder: 'asc' }],
+    });
+    const completions = await prisma.taskCompletion.findMany({
+      where: { ticketId: id },
+    });
+    const completionMap = new Map(completions.map(c => [c.taskTemplateId, c]));
+
+    // Group by category
+    const grouped: Record<string, any[]> = {};
+    for (const t of templates) {
+      if (!grouped[t.category]) grouped[t.category] = [];
+      const completion = completionMap.get(t.id);
+      grouped[t.category].push({
+        ...t,
+        isCompleted: completion?.isCompleted || false,
+        completedAt: completion?.completedAt || null,
+        completedBy: completion?.completedBy || null,
+        notes: completion?.notes || null,
+      });
+    }
+    res.json(grouped);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/tickets/:id/tasks/:taskTemplateId — Toggle task completion
+app.put('/api/tickets/:id/tasks/:taskTemplateId', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const id = (req as any).params?.id || req.params?.id;
+    const taskTemplateId = (req as any).params?.taskTemplateId || req.params?.taskTemplateId;
+    const { isCompleted, notes } = req.body;
+
+    const completion = await prisma.taskCompletion.upsert({
+      where: { ticketId_taskTemplateId: { ticketId: id, taskTemplateId } },
+      create: {
+        ticketId: id,
+        taskTemplateId,
+        isCompleted: isCompleted !== undefined ? isCompleted : true,
+        completedAt: isCompleted !== false ? new Date() : null,
+        completedBy: req.user?.userId || null,
+        notes: notes || null,
+      },
+      update: {
+        isCompleted: isCompleted !== undefined ? isCompleted : true,
+        completedAt: isCompleted !== false ? new Date() : null,
+        completedBy: req.user?.userId || null,
+        notes: notes || null,
+      },
+    });
+    res.json(completion);
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
@@ -2929,6 +3255,50 @@ async function start() {
     console.log('✔ Seeded 3 default product suppliers');
   }
 
+  // Seed default task templates
+  const taskCount = await prisma.taskTemplate.count();
+  if (taskCount === 0) {
+    const taskTemplates = [
+      // DEVELOPER — إعداد المتجر (5)
+      { name: 'إنشاء المتجر على سلة', category: 'DEVELOPER', group: 'إعداد المتجر', groupIcon: '🏪', sortOrder: 1 },
+      { name: 'ربط الدومين', category: 'DEVELOPER', group: 'إعداد المتجر', groupIcon: '🏪', sortOrder: 2 },
+      { name: 'إعداد الصفحات الأساسية', category: 'DEVELOPER', group: 'إعداد المتجر', groupIcon: '🏪', sortOrder: 3 },
+      { name: 'إعداد التصنيفات', category: 'DEVELOPER', group: 'إعداد المتجر', groupIcon: '🏪', sortOrder: 4 },
+      { name: 'إضافة المنتجات', category: 'DEVELOPER', group: 'إعداد المتجر', groupIcon: '🏪', sortOrder: 5 },
+      // DEVELOPER — وسائل الدفع (3)
+      { name: 'تفعيل وسائل الدفع', category: 'DEVELOPER', group: 'وسائل الدفع', groupIcon: '💳', sortOrder: 6 },
+      { name: 'اختبار عمليات الدفع', category: 'DEVELOPER', group: 'وسائل الدفع', groupIcon: '💳', sortOrder: 7 },
+      { name: 'التأكد من عمل البوابات', category: 'DEVELOPER', group: 'وسائل الدفع', groupIcon: '💳', sortOrder: 8 },
+      // DEVELOPER — الشحن (3)
+      { name: 'ربط شركات الشحن', category: 'DEVELOPER', group: 'إعدادات الشحن', groupIcon: '🚚', sortOrder: 9 },
+      { name: 'إعداد مناطق وأسعار الشحن', category: 'DEVELOPER', group: 'إعدادات الشحن', groupIcon: '🚚', sortOrder: 10 },
+      { name: 'اختبار عملية الشحن', category: 'DEVELOPER', group: 'إعدادات الشحن', groupIcon: '🚚', sortOrder: 11 },
+      // DEVELOPER — مهام التطوير (3)
+      { name: 'تطبيق التصميم على المتجر', category: 'DEVELOPER', group: 'مهام التطوير', groupIcon: '💻', sortOrder: 12 },
+      { name: 'ضبط الصفحات والأقسام', category: 'DEVELOPER', group: 'مهام التطوير', groupIcon: '💻', sortOrder: 13 },
+      { name: 'اختبار الواجهة', category: 'DEVELOPER', group: 'مهام التطوير', groupIcon: '💻', sortOrder: 14 },
+      // SEO_FINAL — تحسينات SEO (6)
+      { name: 'إعداد عناوين الصفحات', category: 'SEO_FINAL', group: 'تحسينات SEO', groupIcon: '🔍', sortOrder: 1 },
+      { name: 'إعداد الوصف التعريفي Meta Description', category: 'SEO_FINAL', group: 'تحسينات SEO', groupIcon: '🔍', sortOrder: 2 },
+      { name: 'تحسين الروابط URLs', category: 'SEO_FINAL', group: 'تحسينات SEO', groupIcon: '🔍', sortOrder: 3 },
+      { name: 'تحسين الأقسام والمنتجات لمحركات البحث', category: 'SEO_FINAL', group: 'تحسينات SEO', groupIcon: '🔍', sortOrder: 4 },
+      { name: 'مراجعة المحتوى', category: 'SEO_FINAL', group: 'تحسينات SEO', groupIcon: '🔍', sortOrder: 5 },
+      { name: 'إجراء فحص نهائي للمتجر', category: 'SEO_FINAL', group: 'تحسينات SEO', groupIcon: '🔍', sortOrder: 6 },
+    ];
+    for (const t of taskTemplates) {
+      await prisma.taskTemplate.create({ data: t });
+    }
+    console.log('✔ Seeded default task templates');
+  }
+
+  // Seed default AppSettings
+  await prisma.appSettings.upsert({
+    where: { id: 'default' },
+    create: { id: 'default', restrictClientView: false },
+    update: {},
+  });
+
   app.listen(port, () => console.log(`Server on ${port}`));
 }
 start();
+

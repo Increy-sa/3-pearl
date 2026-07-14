@@ -7,26 +7,6 @@ import { ensureUrl } from '../../utils/ensureUrl';
 
 const API = API_URL;
 
-const TASK_GROUPS = [
-  { title: '💳 وسائل الدفع', tasks: [
-    { key: 'paymentActivated', label: 'تفعيل وسائل الدفع المناسبة' },
-    { key: 'paymentTested', label: 'اختبار عمليات الدفع' },
-    { key: 'paymentGatewaysOk', label: 'التأكد من عمل جميع البوابات بشكل صحيح' },
-  ]},
-  { title: '🚚 إعدادات الشحن', tasks: [
-    { key: 'shippingLinked', label: 'ربط شركات الشحن المناسبة' },
-    { key: 'shippingZonesSet', label: 'إعداد مناطق وأسعار الشحن' },
-    { key: 'shippingTested', label: 'اختبار عملية الشحن' },
-  ]},
-  { title: '🔍 تحسينات SEO', tasks: [
-    { key: 'seoHomePage', label: 'تحسينات الـSEO للصفحة الرئيسية للمتجر' },
-    { key: 'seoCategoriesPage', label: 'تحسينات الـSEO للأقسام الخاصة بالمتجر' },
-    { key: 'metaDescSet', label: 'إعداد الوصف التعريفي (Meta Description)' },
-    { key: 'finalInspection', label: 'إجراء فحص نهائي للمتجر' },
-  ]},
-];
-const ALL_TASKS = TASK_GROUPS.flatMap(g => g.tasks);
-
 const STATUS_BADGES: Record<string, { label: string; cls: string }> = {
   IN_PROGRESS: { label: 'قيد التنفيذ', cls: 'bg-slate-100 text-slate-600' },
   SENT_TO_AM: { label: 'بانتظار مدير الحساب', cls: 'bg-blue-100 text-blue-700' },
@@ -64,6 +44,7 @@ export function SeoFinalSection({ ticket, headers, userRole, onRefresh, setError
   const isAM = ['ADMIN', 'ACCOUNT_MANAGER'].includes(userRole);
   const { showToast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
+  const [dynamicTasks, setDynamicTasks] = useState<any[]>([]);
 
   useEffect(() => {
     fetch(`${API}/api/tickets/${ticket.id}/seo-final`, { headers })
@@ -74,6 +55,11 @@ export function SeoFinalSection({ ticket, headers, userRole, onRefresh, setError
       .then(r => r.json()).then(d => { if (d && !d.error) setSeoChecklist(d); }).catch(() => {});
     fetch(`${API}/api/tickets/${ticket.id}/design-delivery`, { headers })
       .then(r => r.json()).then(d => { if (d?.id) setDelivery(d); }).catch(() => {});
+    // Fetch dynamic tasks
+    fetch(`${API}/api/tickets/${ticket.id}/tasks`, { headers })
+      .then(r => r.json()).then(d => {
+        if (d && d.SEO_FINAL) setDynamicTasks(d.SEO_FINAL);
+      }).catch(() => {});
   }, [ticket.id]);
 
   const saveChecklist = useCallback((data: any) => {
@@ -89,10 +75,18 @@ export function SeoFinalSection({ ticket, headers, userRole, onRefresh, setError
     }, 500);
   }, [ticket.id, headers]);
 
-  const toggle = (key: string) => {
-    const next = { ...checklist, [key]: !checklist?.[key] };
-    setChecklist(next);
-    saveChecklist(next);
+  const toggleTask = async (taskId: string, currentCompleted: boolean) => {
+    setSaving(true);
+    try {
+      const res = await fetch(`${API}/api/tickets/${ticket.id}/tasks/${taskId}`, {
+        method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isCompleted: !currentCompleted })
+      });
+      if (res.ok) {
+        setDynamicTasks(prev => prev.map(t => t.id === taskId ? { ...t, isCompleted: !currentCompleted } : t));
+        setSaveOk(true); setTimeout(() => setSaveOk(false), 2000);
+      }
+    } catch {} finally { setSaving(false); }
   };
 
   // AM review — changes sub-status only, NOT ticket.stage
@@ -115,10 +109,11 @@ export function SeoFinalSection({ ticket, headers, userRole, onRefresh, setError
 
   const status = checklist?.status || 'IN_PROGRESS';
   const badge = STATUS_BADGES[status] || STATUS_BADGES.IN_PROGRESS;
-  const completed = ALL_TASKS.filter(t => !!checklist?.[t.key]).length;
-  const pct = Math.round((completed / ALL_TASKS.length) * 100);
-  const allDone = completed === ALL_TASKS.length;
-  const canEdit = ['IN_PROGRESS', 'AM_REVISION', 'CLIENT_REVISION'].includes(status);
+  const completed = dynamicTasks.filter(t => t.isCompleted).length;
+  const totalTasks = dynamicTasks.length || 1;
+  const pct = Math.round((completed / totalTasks) * 100);
+  const allDone = completed === dynamicTasks.length && dynamicTasks.length > 0;
+  const canEdit = ['IN_PROGRESS', 'AM_REVISION', 'CLIENT_REVISION'].includes(status) && ['SEO', 'ADMIN'].includes(userRole);
 
   let imgs: string[] = [];
   try { imgs = JSON.parse(delivery?.images || '[]'); } catch {}
@@ -158,35 +153,41 @@ export function SeoFinalSection({ ticket, headers, userRole, onRefresh, setError
         <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
           <div className="h-full bg-gradient-to-l from-teal-500 to-emerald-500 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
         </div>
-        <p className="text-[10px] text-slate-400">{completed} / {ALL_TASKS.length} مهمة</p>
+        <p className="text-[10px] text-slate-400">{completed} / {dynamicTasks.length} مهمة</p>
       </div>
 
-      {/* Task groups */}
-      {TASK_GROUPS.map(group => {
-        const gc = group.tasks.filter(t => !!checklist?.[t.key]).length;
-        return (
-          <div key={group.title} className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
-            <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-700">{group.title}</span>
-              <span className="text-[10px] font-bold text-slate-500">{gc}/{group.tasks.length}</span>
-            </div>
-            <div className="divide-y divide-slate-50">
-              {group.tasks.map(task => {
-                const checked = !!checklist?.[task.key];
-                return (
-                  <div key={task.key} className="px-4 py-3">
-                    <button onClick={() => canEdit && toggle(task.key)} disabled={!canEdit}
+      {/* Task groups (dynamic) */}
+      {(() => {
+        // Group dynamic tasks by their group field
+        const groups: Record<string, { icon: string; tasks: any[] }> = {};
+        for (const t of dynamicTasks) {
+          const gKey = t.group || 'أخرى';
+          if (!groups[gKey]) groups[gKey] = { icon: t.groupIcon || '📋', tasks: [] };
+          groups[gKey].tasks.push(t);
+        }
+        return Object.entries(groups).map(([groupName, { icon, tasks: groupTasks }]) => {
+          const gc = groupTasks.filter(t => t.isCompleted).length;
+          return (
+            <div key={groupName} className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+              <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700">{icon} {groupName}</span>
+                <span className="text-[10px] font-bold text-slate-500">{gc}/{groupTasks.length}</span>
+              </div>
+              <div className="divide-y divide-slate-50">
+                {groupTasks.map(task => (
+                  <div key={task.id} className="px-4 py-3">
+                    <button onClick={() => canEdit && toggleTask(task.id, task.isCompleted)} disabled={!canEdit}
                       className="w-full flex items-center gap-3 text-right group disabled:cursor-default cursor-pointer">
-                      {checked ? <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /> : <div className="w-4 h-4 border-2 border-slate-300 rounded shrink-0" />}
-                      <span className={`text-xs font-medium flex-1 ${checked ? 'line-through text-slate-400' : 'text-slate-700'}`}>{task.label}</span>
+                      {task.isCompleted ? <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /> : <div className="w-4 h-4 border-2 border-slate-300 rounded shrink-0" />}
+                      <span className={`text-xs font-medium flex-1 ${task.isCompleted ? 'line-through text-slate-400' : 'text-slate-700'}`}>{task.name}</span>
                     </button>
                   </div>
-                );
-              })}
+                ))}
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        });
+      })()}
 
       {/* All done notice */}
       {allDone && status === 'IN_PROGRESS' && (

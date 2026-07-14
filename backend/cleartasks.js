@@ -1,0 +1,1 @@
+const{PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.taskCompletion.deleteMany({}).then(()=>p.taskTemplate.deleteMany({})).then(()=>console.log('Cleared')).then(()=>p.$disconnect())

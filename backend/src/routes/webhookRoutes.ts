@@ -13,18 +13,18 @@ import bcrypt from 'bcryptjs';
 const router = Router();
 const prisma = new PrismaClient();
 
-// ─── Adtopia Static Token (loaded from .env) ─────────────────────────────────
+// ─── ThreePearl Static Token (loaded from .env) ─────────────────────────────────
 // Set ADTOPIA_WEBHOOK_SECRET in your .env file.
 // The server will throw at startup if this variable is missing.
-const ADTOPIA_STATIC_TOKEN = process.env.ADTOPIA_WEBHOOK_SECRET;
-if (!ADTOPIA_STATIC_TOKEN) {
+const THREEPEARL_STATIC_TOKEN = process.env.ADTOPIA_WEBHOOK_SECRET;
+if (!THREEPEARL_STATIC_TOKEN) {
   throw new Error('FATAL: ADTOPIA_WEBHOOK_SECRET is not set in the environment.');
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// POST /api/webhooks/adtopia
+// POST /api/webhooks/threepearl
 //
-// Receives a new lead/order from Adtopia and provisions the user + ticket.
+// Receives a new lead/order from ThreePearl and provisions the user + ticket.
 //
 // Expected payload:
 // {
@@ -43,15 +43,15 @@ if (!ADTOPIA_STATIC_TOKEN) {
 //   }
 // }
 // ────────────────────────────────────────────────────────────────────────────
-router.post('/adtopia', async (req, res) => {
+router.post('/threepearl', async (req, res) => {
   // ── 1. Static Token Validation ─────────────────────────────────────────────
   const authHeader = req.headers['authorization'] || '';
   const incomingToken = authHeader.startsWith('Bearer ')
     ? authHeader.slice(7).trim()
     : null;
 
-  if (!incomingToken || incomingToken !== ADTOPIA_STATIC_TOKEN) {
-    console.warn('[webhook/adtopia] ❌ Unauthorized — invalid or missing token.');
+  if (!incomingToken || incomingToken !== THREEPEARL_STATIC_TOKEN) {
+    console.warn('[webhook/threepearl] ❌ Unauthorized — invalid or missing token.');
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
@@ -60,7 +60,7 @@ router.post('/adtopia', async (req, res) => {
 
   const VALID_STATUSES = ['success', 'completed'];
   if (!order || !VALID_STATUSES.includes(order.status)) {
-    console.warn(`[webhook/adtopia] ⚠️  Order not successful. Status: "${order?.status}"`);
+    console.warn(`[webhook/threepearl] ⚠️  Order not successful. Status: "${order?.status}"`);
     return res.status(400).json({ error: 'Order not successful' });
   }
 
@@ -92,7 +92,7 @@ router.post('/adtopia', async (req, res) => {
       },
     });
 
-    console.log(`[webhook/adtopia] ✅ User upserted — id: ${user.id}, email: ${user.email}`);
+    console.log(`[webhook/threepearl] ✅ User upserted — id: ${user.id}, email: ${user.email}`);
 
     // ── 4c. Upsert ClientInfo (business/contact data for the ticket) ───────
     // ClientInfo is required by the Ticket model (clientId FK).
@@ -105,7 +105,7 @@ router.post('/adtopia', async (req, res) => {
       customerName: fullName,
       businessName: serviceTitle,   // best approximation from available data
       industry: 'غير محدد',
-      description: `طلب وارد من Adtopia — ${serviceTitle}`,
+      description: `طلب وارد من ThreePearl — ${serviceTitle}`,
       targetAudience: 'غير محدد',
       email,
       phone: phone || null,
@@ -124,12 +124,12 @@ router.post('/adtopia', async (req, res) => {
         checklists: '[]',
         clientId: client.id,
         customerId: user.id,
-        // Store Adtopia order context in staffNotes for the Account Manager
+        // Store ThreePearl order context in staffNotes for the Account Manager
         staffNotes: [
           `📦 خدمة: ${serviceTitle}`,
           `💳 طريقة الدفع: ${order.payment_method || 'غير محدد'}`,
           `💰 المبلغ: ${order.total_amount || 'غير محدد'}`,
-          `🆔 رقم الطلب (Adtopia): ${order.id}`,
+          `🆔 رقم الطلب (ThreePearl): ${order.id}`,
         ].join('\n'),
       },
       include: {
@@ -137,7 +137,7 @@ router.post('/adtopia', async (req, res) => {
       },
     });
 
-    console.log(`[webhook/adtopia] 🎫 Ticket created — id: ${ticket.id}, stage: ${ticket.stage}`);
+    console.log(`[webhook/threepearl] 🎫 Ticket created — id: ${ticket.id}, stage: ${ticket.stage}`);
 
     // ── 5. Return success ──────────────────────────────────────────────────
     return res.status(200).json({
@@ -151,7 +151,7 @@ router.post('/adtopia', async (req, res) => {
     });
 
   } catch (error: any) {
-    console.error('[webhook/adtopia] 🔥 Internal error:', error.message);
+    console.error('[webhook/threepearl] 🔥 Internal error:', error.message);
     return res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 });

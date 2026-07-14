@@ -656,18 +656,14 @@ function CollapsibleSeoSection({ title, defaultOpen, children, ticketId, headers
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
 
   useEffect(() => {
-    const url = type === 'setup'
-      ? `${API_URL}/api/tickets/${ticketId}/seo-checklist`
-      : `${API_URL}/api/tickets/${ticketId}/seo-final`;
-    fetch(url, { headers }).then(r => r.json()).then(d => {
+    fetch(`${API_URL}/api/tickets/${ticketId}/tasks`, { headers }).then(r => r.json()).then(d => {
       if (!d || d.error) return;
-      if (type === 'setup') {
-        const keys = ['sallaAccountCreated', 'storeVerified', 'domainLinked', 'domainPurchased', 'productsUploaded'];
-        setProgress({ completed: keys.filter(k => !!d[k]).length, total: 5 });
-      } else {
-        const keys = ['paymentActivated','paymentTested','paymentGatewaysOk','shippingLinked','shippingZonesSet','shippingTested','seoHomePage','seoCategoriesPage','metaDescSet','finalInspection'];
-        setProgress({ completed: keys.filter(k => !!d[k]).length, total: keys.length });
-      }
+      const category = type === 'setup' ? 'SEO_SETUP' : 'SEO_FINAL';
+      const tasks = d[category] || [];
+      setProgress({
+        completed: tasks.filter((t: any) => t.isCompleted).length,
+        total: tasks.length,
+      });
     }).catch(() => {});
   }, [ticketId, type]);
 
@@ -715,11 +711,13 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
   const [uploadingSupplierFile, setUploadingSupplierFile] = useState(false);
   const [savingSupplier, setSavingSupplier] = useState(false);
 
+  // Auto-refresh ticket data when panel opens to get latest briefs/transfers
+  useEffect(() => { onRefresh(); }, [ticket.id]);
+
   useEffect(() => {
     try { setChecklist(JSON.parse(ticket.checklists || '[]')); } catch { setChecklist([]); }
     setNotes(ticket.staffNotes || '');
     setAssets(ticket.assetsUrl || '');
-
 
     // Fetch logo type image
     if (ticket.aiProposal?.selectedLogoType) {
@@ -871,6 +869,40 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
         </div>
 
         <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 flex-1">
+
+          {/* ── Quick Info Cards ── */}
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-3 border border-blue-100">
+              <p className="text-[9px] text-blue-500 font-bold uppercase tracking-wider">النشاط</p>
+              <p className="text-xs font-extrabold text-slate-900 mt-0.5 truncate">{ticket.aiProposal?.businessName || ticket.client?.businessName || ticket.client?.customerName}</p>
+              <p className="text-[10px] text-slate-500 truncate">{ticket.aiProposal?.industry || ticket.client?.industry || '—'}</p>
+            </div>
+            <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-3 border border-emerald-100">
+              <p className="text-[9px] text-emerald-500 font-bold uppercase tracking-wider">الدومين</p>
+              {ticket.aiProposal?.selectedDomain ? (
+                <a href={`https://${ticket.aiProposal.selectedDomain}`} target="_blank" rel="noreferrer" className="text-xs font-extrabold text-emerald-800 mt-0.5 block truncate hover:underline ltr">{ticket.aiProposal.selectedDomain}</a>
+              ) : (
+                <p className="text-xs font-extrabold text-slate-300 mt-0.5">لم يُحدد</p>
+              )}
+            </div>
+            <div className="bg-gradient-to-br from-violet-50 to-purple-50 rounded-xl p-3 border border-violet-100">
+              <p className="text-[9px] text-violet-500 font-bold uppercase tracking-wider">الشعار</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                {(approvedLogoUrl || ticket.aiProposal?.generatedLogoUrl) ? (
+                  <img src={approvedLogoUrl || normalizeUrl(ticket.aiProposal?.generatedLogoUrl) || ''} alt="logo" className="w-8 h-8 rounded-lg object-contain bg-white border border-violet-100 p-0.5" />
+                ) : null}
+                <p className="text-xs font-extrabold text-slate-700 truncate">{ticket.aiProposal?.selectedLogoTypeName || (approvedLogoUrl ? 'معتمد' : 'لم يُحدد')}</p>
+              </div>
+            </div>
+            <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-3 border border-amber-100">
+              <p className="text-[9px] text-amber-500 font-bold uppercase tracking-wider">الألوان</p>
+              <div className="flex items-center gap-1 mt-1">
+                {brandColors.length > 0 ? brandColors.slice(0, 5).map((c, i) => (
+                  <div key={i} className="w-5 h-5 rounded-md border border-black/10 shadow-sm" style={{ backgroundColor: c }} title={c} />
+                )) : <p className="text-xs text-slate-300 font-bold">لا ألوان</p>}
+              </div>
+            </div>
+          </div>
           {/* SLA */}
           <div className={`p-4 rounded-2xl border flex items-center gap-3 ${ticket.slaBreached ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-100'}`}>
             {ticket.slaBreached ? <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" /> : <Clock className="w-5 h-5 text-slate-400 shrink-0" />}
@@ -931,16 +963,29 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
             // Smart achievement summary from audit logs
             const achievements: string[] = [];
             const logs = ticket.auditLogs || [];
+            // SEO completed
+            if (logs.some((l: any) => l.user?.role === 'SEO' && l.action === 'FLEXIBLE_TRANSFER')) {
+              achievements.push('✅ مهام SEO مكتملة');
+            }
+            // Design approved
             if (logs.some((l: any) => {
-              try { const d = JSON.parse(l.details || '{}'); return d.designStatus === 'CLIENT_APPROVED'; } catch { return false; }
-            }) || ticket.stage === 'DEVELOPMENT' || ticket.stage === 'SEO_FINAL') {
+              try { const d = JSON.parse(l.details || '{}'); return d.designStatus === 'CLIENT_APPROVED' || d.designStatus === 'SEO_APPROVED' || d.designStatus === 'AM_APPROVED'; } catch { return false; }
+            })) {
               achievements.push('✅ التصميم معتمد');
+            }
+            // Designer completed
+            if (logs.some((l: any) => l.user?.role === 'DESIGNER' && l.action === 'FLEXIBLE_TRANSFER')) {
+              achievements.push('✅ المصمم أنهى مهامه');
             }
             if (ticket.aiProposal?.selectedDomain) {
               achievements.push(`✅ الدومين المعتمد: ${ticket.aiProposal.selectedDomain}`);
             }
-            if (ticket.stage === 'SEO_FINAL') {
+            // Developer completed
+            if (logs.some((l: any) => l.user?.role === 'DEVELOPER' && l.action === 'FLEXIBLE_TRANSFER')) {
               achievements.push('✅ مهام التطوير مكتملة');
+            }
+            if (ticket.stage === 'SEO_FINAL') {
+              achievements.push('✅ المراجعة النهائية');
             }
 
             return (
@@ -1372,8 +1417,8 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
             </CollapsibleSection>
           )}
 
-          {/* 🏪 Product Supplier Section — SEO/AM/ADMIN */}
-          {['ADMIN', 'ACCOUNT_MANAGER', 'SEO'].includes(userRole) && supplierSelection && (() => {
+          {/* 🏪 Product Supplier Section — DEVELOPER/AM/ADMIN */}
+          {['ADMIN', 'ACCOUNT_MANAGER', 'DEVELOPER'].includes(userRole) && supplierSelection && (() => {
             const ss = supplierSelection;
             const handleUploadFile = async (file: File) => {
               setUploadingSupplierFile(true);
@@ -1654,10 +1699,10 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
           )}
 
 
-          {/* ══════ SEO_STORE_SETUP Stage ══════ */}
-          {(ticket.stage === 'SEO_STORE_SETUP' || ((userRole === 'SEO' || userRole === 'ADMIN') && ticket.stage !== 'SEO_STORE_SETUP' && ticket.stage !== 'DELIVERED')) && (() => {
-            const isNativeStage = ticket.stage === 'SEO_STORE_SETUP';
-            if (!isNativeStage && !['SEO', 'ADMIN'].includes(userRole)) return null;
+          {/* ══════ SEO_STORE_SETUP Stage (now managed by DEVELOPER) ══════ */}
+          {(ticket.stage === 'SEO_STORE_SETUP' || ticket.stage === 'DEVELOPMENT' || (['DEVELOPER', 'ADMIN', 'ACCOUNT_MANAGER'].includes(userRole) && ticket.stage !== 'DELIVERED')) && (() => {
+            const isNativeStage = ticket.stage === 'SEO_STORE_SETUP' || ticket.stage === 'DEVELOPMENT';
+            if (!isNativeStage && !['DEVELOPER', 'ADMIN', 'ACCOUNT_MANAGER'].includes(userRole)) return null;
             return (
               <CollapsibleSeoSection
                 title="📋 مهام إعداد المتجر"
@@ -1671,10 +1716,8 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
             );
           })()}
 
-          {/* ── DESIGN Stage — Designer Upload / SEO & Client Review ──── */}
-          {ticket.stage === 'DESIGN' && (
-            <DesignSection ticket={ticket} headers={headers} staff={staff} userRole={userRole} onRefresh={onRefresh} setErrorModal={setErrorModal} />
-          )}
+          {/* ── DESIGN — Designer Upload / Review (visible in all stages once delivery exists) ──── */}
+          <DesignSection ticket={ticket} headers={headers} staff={staff} userRole={userRole} onRefresh={onRefresh} setErrorModal={setErrorModal} />
 
           {/* ── DEVELOPMENT Stage — Dev Checklist / SEO Review ─────── */}
           {ticket.stage === 'DEVELOPMENT' && (
@@ -1682,9 +1725,9 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
           )}
 
           {/* ══════ SEO_FINAL Stage ══════ */}
-          {(ticket.stage === 'SEO_FINAL' || ((userRole === 'SEO' || userRole === 'ADMIN') && ticket.stage !== 'SEO_FINAL' && ticket.stage !== 'DELIVERED')) && (() => {
+          {(ticket.stage === 'SEO_FINAL' || ((['SEO', 'ADMIN', 'ACCOUNT_MANAGER'].includes(userRole)) && ticket.stage !== 'SEO_FINAL' && ticket.stage !== 'DELIVERED')) && (() => {
             const isNativeStage = ticket.stage === 'SEO_FINAL';
-            if (!isNativeStage && !['SEO', 'ADMIN'].includes(userRole)) return null;
+            if (!isNativeStage && !['SEO', 'ADMIN', 'ACCOUNT_MANAGER'].includes(userRole)) return null;
             return (
               <CollapsibleSeoSection
                 title="📋 مهام المراجعة النهائية"
@@ -1722,8 +1765,8 @@ export function TicketDetailPanel({ ticket, staff, userRole, userId, headers, on
             </section>
           )}
 
-          {/* ── Flexible Transfer — AM / SEO / ADMIN (all stages except DELIVERED) ── */}
-          {ticket.stage !== 'DELIVERED' && ['ADMIN', 'ACCOUNT_MANAGER', 'SEO'].includes(userRole) && (
+          {/* ── Flexible Transfer — All Staff (all stages except DELIVERED) ── */}
+          {ticket.stage !== 'DELIVERED' && userRole !== 'CUSTOMER' && (
             <FlexibleTransferSection ticket={ticket} headers={headers} staff={staff} userRole={userRole} onRefresh={onRefresh} setErrorModal={setErrorModal} />
           )}
 

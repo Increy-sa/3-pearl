@@ -2,7 +2,7 @@ import { API_URL } from '../config/api';
 
 /**
  * Check if the API itself is running locally.
- * If API_URL points to fawri.net, then files are on the server
+ * If API_URL points to the production domain, then files are on the server
  * even if the browser is on localhost.
  */
 const isApiLocal = API_URL.includes('localhost') || API_URL.includes('127.0.0.1');
@@ -10,7 +10,7 @@ const isApiLocal = API_URL.includes('localhost') || API_URL.includes('127.0.0.1'
 /**
  * Normalize a URL stored in the database.
  *
- * If API points to production (fawri.net):
+ * If API points to production (capsystem.net):
  *   - Converts localhost URLs → API_URL (files are on the server)
  *   - Converts relative paths → full API_URL
  *
@@ -49,6 +49,6 @@ export const normalizeUrl = (url: string | null | undefined): string | null => {
     }
   }
 
-  // Already a full external URL (e.g. https://fawri.net/uploads/...)
+  // Already a full external URL (e.g. https://capsystem.net/uploads/...)
   return url;
 };

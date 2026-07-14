@@ -1,9 +1,9 @@
 module.exports = {
   apps: [
     {
-      name: 'fawri-backend',
+      name: 'capsystem-backend',
       script: './dist/index.js',
-      cwd: '/var/www/fawri/backend',
+      cwd: '/var/www/capsystem/backend',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
@@ -14,8 +14,8 @@ module.exports = {
         PORT: 5000,
       },
       // Logging
-      error_file: '/var/www/fawri/logs/backend-error.log',
-      out_file: '/var/www/fawri/logs/backend-out.log',
+      error_file: '/var/www/capsystem/logs/backend-error.log',
+      out_file: '/var/www/capsystem/logs/backend-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: true,
       // Graceful restart

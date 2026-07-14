@@ -37,7 +37,7 @@ export function AIProposalView({ proposal, legalData, intakeData }: { proposal: 
   const { login, user, setProfileComplete, token: authToken } = useAuthStore();
   const navigate = useNavigate();
 
-  // Is this an already-authenticated CUSTOMER (came from Adtopia onboarding guard)?
+  // Is this an already-authenticated CUSTOMER (came from ThreePearl onboarding guard)?
   const isAuthenticatedCustomer = !!user && user.role === 'CUSTOMER';
 
   useEffect(() => {

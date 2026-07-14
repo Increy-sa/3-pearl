@@ -30,7 +30,7 @@ export function SeoProposalsSection({ ticket, headers, userRole, onRefresh, setE
   const [reviewLoading, setReviewLoading] = useState(false);
 
   const isAM = ['ADMIN', 'ACCOUNT_MANAGER'].includes(userRole);
-  const isSEO = userRole === 'SEO' || userRole === 'ADMIN';
+  const isDev = userRole === 'DEVELOPER' || userRole === 'ADMIN';
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -82,7 +82,7 @@ export function SeoProposalsSection({ ticket, headers, userRole, onRefresh, setE
 
   const status = proposal?.status || 'DRAFT';
   const badge = STATUS_BADGES[status] || STATUS_BADGES.DRAFT;
-  const canEdit = isSEO && ['DRAFT', 'AM_REVISION', 'CLIENT_REVISION'].includes(status);
+  const canEdit = isDev && ['DRAFT', 'AM_REVISION', 'CLIENT_REVISION'].includes(status);
 
   return (
     <section className="space-y-4">

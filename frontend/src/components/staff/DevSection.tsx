@@ -1,14 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { API_URL } from '../../config/api';
 import { normalizeUrl } from '../../utils/normalizeUrl';
-import { CheckCircle2, AlertCircle, ExternalLink, FileText, Clock, Send, Image as ImageIcon, Link2, Lock, Eye, EyeOff } from 'lucide-react';
+import { CheckCircle2, AlertCircle, ExternalLink, FileText, Image as ImageIcon, Link2, Lock, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '../ui/Toast';
 import { ensureUrl } from '../../utils/ensureUrl';
 
 const API = API_URL;
-const DEV_TASKS = [
-  { key: 'designApplied', label: 'تطبيق التصميم المعتمد على المتجر' },
-];
 
 const REVIEW_BADGES: Record<string, { label: string; cls: string }> = {
   PENDING: { label: 'بانتظار المراجعة', cls: 'bg-slate-100 text-slate-600' },
@@ -32,16 +29,19 @@ export function DevSection({ ticket, headers, userRole, onRefresh, setErrorModal
   const [revNotes, setRevNotes] = useState('');
   const [showRevForm, setShowRevForm] = useState(false);
   const [reviewLoading, setReviewLoading] = useState(false);
-  const [submittingToSeo, setSubmittingToSeo] = useState(false);
-  const [resubmitBrief, setResubmitBrief] = useState('');
   const [storeCreds, setStoreCreds] = useState<{ email: string; password: string } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [dynamicTasks, setDynamicTasks] = useState<any[]>([]);
+  const [storeEmail, setStoreEmail] = useState('');
+  const [storePassword, setStorePassword] = useState('');
+  const [seoChecklist, setSeoChecklist] = useState<any>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const credDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { showToast } = useToast();
 
   // ─── Role helpers ───────────────────────────────────────────────────
   const isDeveloper = userRole === 'DEVELOPER' || userRole === 'ADMIN';
-  const isSEO = userRole === 'SEO' || userRole === 'ADMIN';
+  const isAdminOrAM = ['ADMIN', 'ACCOUNT_MANAGER'].includes(userRole);
   const canSeeCredentials = ticket.showCredentialsToDev === true || ['ADMIN', 'ACCOUNT_MANAGER', 'SEO'].includes(userRole);
 
   useEffect(() => {
@@ -49,13 +49,23 @@ export function DevSection({ ticket, headers, userRole, onRefresh, setErrorModal
       .then(r => r.json()).then(d => { if (d && !d.error) setChecklist(d); }).catch(() => { });
     fetch(`${API}/api/tickets/${ticket.id}/design-delivery`, { headers })
       .then(r => r.json()).then(d => { if (d && d.id) setDelivery(d); }).catch(() => { });
-    // Fetch store credentials if allowed
-    if (canSeeCredentials) {
-      fetch(`${API}/api/tickets/${ticket.id}/seo-checklist`, { headers })
-        .then(r => r.json()).then(d => {
-          if (d && !d.error) setStoreCreds({ email: d.newGmail || d.storeEmail || '', password: d.newGmailPassword || d.storePassword || '' });
-        }).catch(() => { });
-    }
+    // Fetch seo-checklist (for store credentials)
+    fetch(`${API}/api/tickets/${ticket.id}/seo-checklist`, { headers })
+      .then(r => r.json()).then(d => {
+        if (d && !d.error) {
+          setSeoChecklist(d);
+          setStoreEmail(d.storeEmail || '');
+          setStorePassword(d.storePassword || '');
+          if (canSeeCredentials) {
+            setStoreCreds({ email: d.newGmail || d.storeEmail || '', password: d.newGmailPassword || d.storePassword || '' });
+          }
+        }
+      }).catch(() => { });
+    // Fetch dynamic tasks
+    fetch(`${API}/api/tickets/${ticket.id}/tasks`, { headers })
+      .then(r => r.json()).then(d => {
+        if (d && d.DEVELOPER) setDynamicTasks(d.DEVELOPER);
+      }).catch(() => { });
   }, [ticket.id]);
 
   const saveChecklist = useCallback((data: any) => {
@@ -72,49 +82,36 @@ export function DevSection({ ticket, headers, userRole, onRefresh, setErrorModal
     }, 500);
   }, [ticket.id, headers]);
 
-  const toggle = (key: string) => {
-    const next = { ...checklist, [key]: !checklist?.[key] };
-    setChecklist(next);
-    saveChecklist(next);
-  };
-
-  // Developer explicitly submits to SEO
-  const submitToSeo = async () => {
-    setSubmittingToSeo(true);
+  const toggleTask = async (taskId: string, currentCompleted: boolean) => {
+    setSaving(true);
     try {
-      const res = await fetch(`${API}/api/tickets/${ticket.id}/dev-checklist`, {
+      const res = await fetch(`${API}/api/tickets/${ticket.id}/tasks/${taskId}`, {
         method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isSubmittedToSeo: true })
+        body: JSON.stringify({ isCompleted: !currentCompleted })
       });
       if (res.ok) {
-        const saved = await res.json();
-        setChecklist(saved);
-        showToast('تم تسليم العمل لفريق SEO بنجاح ✅');
-      } else {
-        showToast('فشل التسليم، حاول مرة أخرى', 'error');
+        setDynamicTasks(prev => prev.map(t => t.id === taskId ? { ...t, isCompleted: !currentCompleted } : t));
+        setSaveOk(true); setTimeout(() => setSaveOk(false), 2000);
       }
-    } catch { showToast('تعذر الاتصال بالخادم', 'error'); }
-    finally { setSubmittingToSeo(false); }
+    } catch { } finally { setSaving(false); }
   };
 
-  // Developer resubmits to SEO (after task was returned)
-  const resubmitToSeo = async () => {
-    setSubmittingToSeo(true);
-    try {
-      const res = await fetch(`${API}/api/tickets/${ticket.id}/dev-checklist/resubmit`, {
-        method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ devBriefToSeo: resubmitBrief.trim() })
-      });
-      if (res.ok) {
-        const saved = await res.json();
-        setChecklist(saved);
-        setResubmitBrief('');
-        showToast('تم إعادة تسليم العمل لفريق SEO بنجاح ✅');
-      } else {
-        showToast('فشل التسليم، حاول مرة أخرى', 'error');
-      }
-    } catch { showToast('تعذر الاتصال بالخادم', 'error'); }
-    finally { setSubmittingToSeo(false); }
+  // Save store credentials to seo-checklist (debounced)
+  const saveStoreField = (field: 'storeEmail' | 'storePassword', value: string) => {
+    if (field === 'storeEmail') setStoreEmail(value);
+    else setStorePassword(value);
+    if (credDebounceRef.current) clearTimeout(credDebounceRef.current);
+    credDebounceRef.current = setTimeout(async () => {
+      const payload = field === 'storeEmail'
+        ? { storeEmail: value, storePassword }
+        : { storeEmail, storePassword: value };
+      try {
+        await fetch(`${API}/api/tickets/${ticket.id}/seo-checklist`, {
+          method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      } catch { }
+    }, 600);
   };
 
   const seoReview = async (action: string) => {
@@ -140,18 +137,16 @@ export function DevSection({ ticket, headers, userRole, onRefresh, setErrorModal
     finally { setReviewLoading(false); }
   };
 
-  const completed = DEV_TASKS.filter(t => !!checklist?.[t.key]).length;
-  const pct = Math.round((completed / DEV_TASKS.length) * 100);
-  const allDone = completed === DEV_TASKS.length;
+  const completed = dynamicTasks.filter(t => t.isCompleted).length;
+  const totalTasks = dynamicTasks.length || 1;
+  const pct = Math.round((completed / totalTasks) * 100);
+  const allDone = completed === dynamicTasks.length && dynamicTasks.length > 0;
   const reviewStatus = checklist?.seoReviewStatus || 'PENDING';
   const reviewBadge = REVIEW_BADGES[reviewStatus] || REVIEW_BADGES.PENDING;
   const isSubmitted = !!checklist?.isSubmittedToSeo;
 
   // Developer can edit checkboxes only when not yet approved and not submitted (or in revision)
   const canDevEdit = isDeveloper && reviewStatus !== 'APPROVED' && (!isSubmitted || reviewStatus === 'REVISION');
-
-  // DEBUG - remove later
-  console.log('[DevSection DEBUG]', { userRole, isDeveloper, reviewStatus, isSubmitted, allDone, checklist: checklist?.seoReviewStatus });
 
   let imgs: string[] = [];
   try { imgs = JSON.parse(delivery?.images || '[]'); } catch { }
@@ -226,7 +221,7 @@ export function DevSection({ ticket, headers, userRole, onRefresh, setErrorModal
       {reviewStatus === 'REVISION' && checklist?.seoReviewNotes && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2">
           <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-          <div><p className="text-xs font-bold text-red-800">ملاحظات SEO:</p><p className="text-xs text-red-700 mt-1">{checklist.seoReviewNotes}</p></div>
+          <div><p className="text-xs font-bold text-red-800">ملاحظات المراجع:</p><p className="text-xs text-red-700 mt-1">{checklist.seoReviewNotes}</p></div>
         </div>
       )}
 
@@ -239,81 +234,38 @@ export function DevSection({ ticket, headers, userRole, onRefresh, setErrorModal
         <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
           <div className="h-full bg-gradient-to-l from-blue-500 to-indigo-500 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
         </div>
-        <p className="text-[10px] text-slate-400">{completed} / {DEV_TASKS.length} مهمة</p>
+        <p className="text-[10px] text-slate-400">{completed} / {dynamicTasks.length} مهمة</p>
       </div>
 
       {/* Task checklist */}
       <div className="bg-white rounded-2xl border border-slate-100 divide-y divide-slate-50">
-        {DEV_TASKS.map(task => {
-          const checked = !!checklist?.[task.key];
+        {dynamicTasks.map((task, idx) => {
           const isInteractive = canDevEdit;
+          // First task is "إنشاء المتجر على سلة" — show credential fields when completed
+          const isStoreCreationTask = idx === 0 && task.name?.includes('إنشاء المتجر');
           return (
-            <div key={task.key} className="px-4 py-3">
-              <button onClick={() => isInteractive && toggle(task.key)} disabled={!isInteractive}
+            <div key={task.id} className="px-4 py-3 space-y-2">
+              <button onClick={() => isInteractive && toggleTask(task.id, task.isCompleted)} disabled={!isInteractive}
                 className="w-full flex items-center gap-3 text-right group disabled:cursor-default cursor-pointer">
-                {checked
+                {task.isCompleted
                   ? <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
                   : <div className="w-4 h-4 border-2 border-slate-300 rounded shrink-0 group-hover:border-slate-400" />
                 }
-                <span className={`text-xs font-medium flex-1 text-right ${checked ? 'line-through text-slate-400' : 'text-slate-700'}`}>{task.label}</span>
+                <span className={`text-xs font-medium flex-1 text-right ${task.isCompleted ? 'line-through text-slate-400' : 'text-slate-700'}`}>{task.name}</span>
               </button>
+              {/* Store credential fields — appear when first task (store creation) is completed */}
+              {isStoreCreationTask && task.isCompleted && isDeveloper && (
+                <div className="mr-7 space-y-2">
+                  <input type="email" value={storeEmail} onChange={e => saveStoreField('storeEmail', e.target.value)}
+                    placeholder="إيميل المتجر" className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                  <input type="text" value={storePassword} onChange={e => saveStoreField('storePassword', e.target.value)}
+                    placeholder="باسورد المتجر" className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                </div>
+              )}
             </div>
           );
         })}
       </div>
-
-      {/* ═══════════════════════════════════════════════════════════════
-          Developer: Submit to SEO button — shows when all done but not yet submitted
-         ═══════════════════════════════════════════════════════════════ */}
-      {allDone && !isSubmitted && isDeveloper && reviewStatus !== 'APPROVED' && (
-        <button onClick={submitToSeo} disabled={submittingToSeo}
-          className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer">
-          {submittingToSeo
-            ? <><Clock className="w-4 h-4 animate-spin" /> جاري التسليم...</>
-            : <><Send className="w-4 h-4" /> تسليم العمل لفريق SEO</>
-          }
-        </button>
-      )}
-
-      {/* Developer: After submitting — waiting message */}
-      {allDone && isSubmitted && !isSEO && reviewStatus === 'PENDING' && (
-        <div className="bg-blue-50/50 rounded-2xl border border-blue-200 p-4">
-          <p className="text-xs font-bold text-blue-800">تم تسليم جميع المهام — بانتظار مراجعة فريق SEO</p>
-        </div>
-      )}
-
-      {/* SEO Review (Approve / Revision) — SEO role ONLY, after dev submitted */}
-      {allDone && isSubmitted && reviewStatus === 'PENDING' && isSEO && (
-        <div className="bg-blue-50/50 rounded-2xl border border-blue-200 p-4 space-y-3">
-          <p className="text-xs font-bold text-blue-800">المطور أنهى جميع المهام - بانتظار مراجعتك</p>
-          {showRevForm ? (
-            <div className="space-y-2">
-              <textarea value={revNotes} onChange={e => setRevNotes(e.target.value)} placeholder="ملاحظات التعديل..." rows={3}
-                className="w-full text-xs border border-blue-200 rounded-xl px-3 py-2 bg-white focus:outline-none resize-none" />
-              <div className="flex gap-2">
-                <button onClick={() => seoReview('REVISION')} disabled={reviewLoading} className="px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-bold disabled:opacity-50 cursor-pointer">إرسال طلب التعديل</button>
-                <button onClick={() => setShowRevForm(false)} className="px-3 py-2 text-slate-500 text-xs font-bold cursor-pointer">إلغاء</button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              <button onClick={() => seoReview('APPROVE')} disabled={reviewLoading} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold disabled:opacity-50 flex items-center gap-1.5 cursor-pointer">
-                <CheckCircle2 className="w-3.5 h-3.5" /> اعتماد عمل المطور
-              </button>
-              <button onClick={() => setShowRevForm(true)} className="px-4 py-2 bg-red-100 text-red-700 rounded-xl text-xs font-bold border border-red-200 cursor-pointer">طلب تعديل</button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Approved status — visible to all */}
-      {reviewStatus === 'APPROVED' && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-          <p className="text-xs font-bold text-emerald-800">تم اعتماد عمل المطور من فريق SEO ✅</p>
-        </div>
-      )}
-
       {/* Developer's brief to SEO — shown when submitted */}
       {checklist?.devBriefToSeo && reviewStatus === 'PENDING' && isSubmitted && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-start gap-2">
@@ -322,39 +274,6 @@ export function DevSection({ ticket, headers, userRole, onRefresh, setErrorModal
             <p className="text-[10px] font-bold text-blue-500 mb-1">بريف المطور لفريق SEO</p>
             <p className="text-xs text-blue-900 whitespace-pre-wrap leading-relaxed">{checklist.devBriefToSeo}</p>
           </div>
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════
-          Developer: Resubmit to SEO — when task was previously approved
-          or SEO requested revision
-         ═══════════════════════════════════════════════════════════════ */}
-      {isDeveloper && (reviewStatus === 'APPROVED' || reviewStatus === 'REVISION') && (
-        <div className="bg-indigo-50 rounded-2xl border border-indigo-200 p-4 space-y-3">
-          <div className="flex items-start gap-2">
-            <Send className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-xs font-bold text-indigo-800">الطلب رجع لك — اكتب بريف وأعد التسليم لفريق SEO</p>
-              <p className="text-[10px] text-indigo-600 mt-0.5">أضف ملاحظاتك عن التعديلات أو التحديثات اللي عملتها</p>
-            </div>
-          </div>
-          <textarea
-            value={resubmitBrief}
-            onChange={e => setResubmitBrief(e.target.value)}
-            placeholder="اكتب بريف المطور هنا... (ملاحظات عن التعديلات المنفذة)"
-            rows={3}
-            className="w-full text-xs border border-indigo-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
-          />
-          <button
-            onClick={resubmitToSeo}
-            disabled={submittingToSeo}
-            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
-          >
-            {submittingToSeo
-              ? <><Clock className="w-4 h-4 animate-spin" /> جاري إعادة التسليم...</>
-              : <><Send className="w-4 h-4" /> إعادة تسليم العمل لفريق SEO</>
-            }
-          </button>
         </div>
       )}
     </div>

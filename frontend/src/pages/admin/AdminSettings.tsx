@@ -70,6 +70,10 @@ export function AdminSettings() {
   const [supplierSaving, setSupplierSaving] = useState(false);
   const [uploadingSupplierImage, setUploadingSupplierImage] = useState(false);
 
+  // Client restriction toggle state
+  const [restrictClientView, setRestrictClientView] = useState(false);
+  const [savingRestriction, setSavingRestriction] = useState(false);
+
   const uploadLogoImage = async (file: File): Promise<string | null> => {
     try {
       const reader = new FileReader();
@@ -108,6 +112,11 @@ export function AdminSettings() {
       } finally { setSupplierLoading(false); }
     };
     fetchSettings(); fetchLogoTypes(); fetchSuppliers();
+    // Fetch app settings (restrictClientView)
+    fetch(`${API}/api/settings/app`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then(d => {
+        if (d && typeof d.restrictClientView === 'boolean') setRestrictClientView(d.restrictClientView);
+      }).catch(() => {});
   }, [token]);
 
   const saveProfile = async (e: React.FormEvent) => {
@@ -120,10 +129,10 @@ export function AdminSettings() {
         body: JSON.stringify(agencyProfile),
       });
       if (res.ok) {
-        showToast('تم حفظ بيانات ادتوبيا ✅');
+        showToast('تم حفظ بيانات Three Pearl ✅');
       } else {
         const err = await res.json();
-        showToast(err.error || 'فشل حفظ بيانات ادتوبيا', 'error');
+        showToast(err.error || 'فشل حفظ بيانات Three Pearl', 'error');
       }
     } finally {
       setSavingProfile(false);
@@ -200,7 +209,7 @@ export function AdminSettings() {
     <div className="space-y-4 sm:space-y-6" dir="rtl">
       <div>
         <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900">{isAdmin ? 'إعدادات المدير' : 'الإعدادات'}</h1>
-        <p className="text-xs sm:text-sm text-slate-500 mt-1">{isAdmin ? 'إدارة بيانات ادتوبيا وتكوين SLA العام للنظام.' : 'إدارة حسابك وتغيير كلمة المرور.'}</p>
+        <p className="text-xs sm:text-sm text-slate-500 mt-1">{isAdmin ? 'إدارة بيانات Three Pearl وتكوين SLA العام للنظام.' : 'إدارة حسابك وتغيير كلمة المرور.'}</p>
       </div>
 
       {/* ── Change Password ───────────────────────────────────────── */}
@@ -271,10 +280,57 @@ export function AdminSettings() {
         </form>
       </section>
 
+      {/* ── Client View Restriction Toggle (ADMIN only) ─────────────── */}
+      {isAdmin && (
+        <section className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm">
+          <h2 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
+            <Lock className="w-5 h-5 text-amber-500" /> تقييد العرض على العميل
+          </h2>
+          <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+            عند التفعيل، مدير الحساب والأدمن فقط يمكنهم العرض على العميل (تصاميم، مقترحات، منتجات، مراجعة نهائية). عند الإيقاف، جميع الموظفين يمكنهم ذلك.
+          </p>
+          <label className={`flex items-center gap-4 cursor-pointer py-3 px-4 rounded-xl border-2 transition-all duration-300 ${
+            restrictClientView
+              ? 'bg-amber-50 border-amber-300 shadow-md shadow-amber-100/50'
+              : 'bg-slate-50 border-slate-200 hover:border-slate-300'
+          }`}>
+            <div className={`relative w-12 h-6 rounded-full transition-all duration-300 shrink-0 ${
+              restrictClientView ? 'bg-amber-500' : 'bg-slate-200'
+            }`}>
+              <div className={`absolute top-0.5 w-5 h-5 rounded-full shadow-sm transition-all duration-300 bg-white ${
+                restrictClientView ? 'left-0.5' : 'right-0.5'
+              }`} />
+            </div>
+            <input type="checkbox" checked={restrictClientView} onChange={async (e) => {
+              const newVal = e.target.checked;
+              setRestrictClientView(newVal);
+              setSavingRestriction(true);
+              try {
+                const res = await fetch(`${API}/api/settings/app`, {
+                  method: 'PUT', headers,
+                  body: JSON.stringify({ restrictClientView: newVal }),
+                });
+                if (res.ok) showToast(newVal ? 'تم تفعيل التقييد ✅' : 'تم إيقاف التقييد');
+                else { const err = await res.json(); showToast(err.error || 'فشل الحفظ', 'error'); setRestrictClientView(!newVal); }
+              } catch { showToast('تعذر الاتصال', 'error'); setRestrictClientView(!newVal); }
+              finally { setSavingRestriction(false); }
+            }} className="sr-only" />
+            <div className="flex-1">
+              <span className={`text-sm font-bold transition-colors ${
+                restrictClientView ? 'text-amber-800' : 'text-slate-600'
+              }`}>
+                {restrictClientView ? '🔒 مُفعّل — مدير الحساب والأدمن فقط' : '🔓 مُعطّل — جميع الموظفين'}
+              </span>
+              {savingRestriction && <span className="text-[10px] text-slate-400 animate-pulse mr-2">جاري الحفظ...</span>}
+            </div>
+          </label>
+        </section>
+      )}
+
       {isAdmin && (
       <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
         <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-          <Settings className="w-5 h-5 text-indigo-500" /> بيانات ادتوبيا
+          <Settings className="w-5 h-5 text-indigo-500" /> بيانات Three Pearl
         </h2>
         <form onSubmit={saveProfile} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
@@ -319,7 +375,7 @@ export function AdminSettings() {
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-60 cursor-pointer"
             >
               {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              حفظ بيانات ادتوبيا
+              حفظ بيانات Three Pearl
             </button>
           </div>
         </form>

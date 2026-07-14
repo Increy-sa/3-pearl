@@ -144,7 +144,7 @@ export function Login() {
             <LogIn className="w-7 h-7 sm:w-8 sm:h-8" />
           </div>
           <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">تسجيل الدخول</h2>
-          <p className="text-sm sm:text-base text-slate-500 mt-2">مرحباً بك مجدداً في ادتوبيا</p>
+          <p className="text-sm sm:text-base text-slate-500 mt-2">مرحباً بك مجدداً في Three Pearl</p>
         </div>
 
         {error && (

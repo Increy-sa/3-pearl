@@ -5,6 +5,7 @@ import {
   Loader2, AlertTriangle, RefreshCw, Activity, Eye, EyeOff,
   Trash2, Archive, ArchiveRestore, Search, Clock, Sparkles, CalendarDays, X
 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 
 import { API_URL } from '../../config/api';
 
@@ -77,6 +78,7 @@ export function StaffDashboard() {
   const [dateTo, setDateTo]                 = useState('');
   const [showDateFilter, setShowDateFilter] = useState(false);
   const selectedTicketIdRef = useRef<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Confirmation modal state
   const [confirmModal, setConfirmModal] = useState<{
@@ -119,6 +121,26 @@ export function StaffDashboard() {
   }, [headers]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Auto-open ticket from ?ticket= query param (e.g. from notification click)
+  useEffect(() => {
+    const ticketParam = searchParams.get('ticket');
+    if (ticketParam && tickets.length > 0) {
+      const found = tickets.find(t => t.id === ticketParam);
+      if (found) {
+        setSelectedTicket(found);
+      } else {
+        // Try archived
+        const foundArchived = archivedTickets.find(t => t.id === ticketParam);
+        if (foundArchived) {
+          setViewMode('archived');
+          setSelectedTicket(foundArchived);
+        }
+      }
+      // Clear the param so it doesn't re-trigger
+      setSearchParams({}, { replace: true });
+    }
+  }, [tickets, archivedTickets, searchParams]);
 
   const togglePasswordInline = async (ticketId: string) => {
     await fetch(`${API}/api/staff/tickets/${ticketId}/toggle-password`, {

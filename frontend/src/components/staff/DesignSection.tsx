@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { API_URL } from '../../config/api';
 import { normalizeUrl } from '../../utils/normalizeUrl';
-import { Send, CheckCircle2, AlertCircle, ExternalLink, Upload, X, Image as ImageIcon, Link2, Users, Clock, FileText, Palette, CheckCircle } from 'lucide-react';
+import { CheckCircle2, AlertCircle, ExternalLink, Upload, X, Image as ImageIcon, Link2, Clock, FileText, Palette, CheckCircle, Send } from 'lucide-react';
 import { useToast } from '../ui/Toast';
 import { ensureUrl } from '../../utils/ensureUrl';
 const API = API_URL;
@@ -39,13 +39,7 @@ export function DesignSection({ ticket, headers, staff, userRole, onRefresh, set
   const [showRevForm, setShowRevForm] = useState(false);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  // Transfer states
-  const [selectedDevId, setSelectedDevId] = useState('');
-  const [devBrief, setDevBrief] = useState('');
-  const [transferring, setTransferring] = useState(false);
-  const [customSlaHours, setCustomSlaHours] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const developers = staff.filter(s => s.role === 'DEVELOPER' && s.isActive);
   const proposal = ticket.aiProposal;
   const { showToast } = useToast();
   const [logoTypeImageUrl, setLogoTypeImageUrl] = useState<string | null>(null);
@@ -163,23 +157,6 @@ export function DesignSection({ ticket, headers, staff, userRole, onRefresh, set
     finally { setReviewLoading(false); }
   };
 
-  const transfer = async () => {
-    if (!selectedDevId) return setErrorModal('يجب اختيار المطور');
-    setTransferring(true);
-    try {
-      const res = await fetch(`${API}/api/tickets/${ticket.id}/transfer-to-dev`, {
-        method: 'PUT', headers, body: JSON.stringify({
-          developerId: selectedDevId,
-          devBrief: devBrief.trim(),
-          customSlaHours: customSlaHours ? Number(customSlaHours) : undefined,
-        })
-      });
-      if (res.ok) { showToast('تم تحويل المهمة للمطور ✅'); onRefresh(); }
-      else { const e = await res.json(); setErrorModal(e.error); }
-    } catch { setErrorModal('تعذر الاتصال'); }
-    finally { setTransferring(false); }
-  };
-
   const status = delivery?.status || 'DRAFT';
   const badge = STATUS_BADGES[status] || STATUS_BADGES.DRAFT;
 
@@ -189,15 +166,72 @@ export function DesignSection({ ticket, headers, staff, userRole, onRefresh, set
   // Was the logo previously approved by client? (re-assignment scenario)
   const wasClientApproved = delivery?.isFinalized === true;
 
-
+  // Don't render if no delivery data and ticket is not in DESIGN stage
+  if (!delivery && ticket.stage !== 'DESIGN') return null;
 
   return (
     <div className="space-y-4" dir="rtl">
-      {/* Brief from SEO */}
-      {ticket.seoBrief && (
-        <div className="bg-blue-50 rounded-2xl border border-blue-200 p-4">
-          <h4 className="text-xs font-bold text-blue-700 mb-2 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> بريف فريق SEO</h4>
-          <p className="text-xs text-blue-900 whitespace-pre-wrap leading-relaxed">{ticket.seoBrief}</p>
+      {/* Latest transfer brief (from audit logs) */}
+      {(() => {
+        const transferActions = ['FLEXIBLE_TRANSFER', 'ASSIGNED_AM', 'STAGE_CHANGED', 'MOVED_TO_DEVELOPMENT', 'EMERGENCY_TRANSFER', 'ASSIGNED_STAFF'];
+        const latestTransfer = ticket.auditLogs?.find((log: any) => {
+          if (!transferActions.includes(log.action)) return false;
+          try {
+            const d = JSON.parse(log.details || '{}');
+            return !!d.brief;
+          } catch { return false; }
+        });
+        if (!latestTransfer && !ticket.seoBrief) return null;
+        
+        let brief = ticket.seoBrief || '';
+        let senderName = '';
+        let senderRole = '';
+        let timestamp = '';
+        
+        if (latestTransfer) {
+          try {
+            const d = JSON.parse(latestTransfer.details || '{}');
+            brief = d.brief || brief;
+            senderName = latestTransfer.user?.name || d.assigneeName || '';
+            senderRole = latestTransfer.user?.role || '';
+            timestamp = latestTransfer.createdAt;
+          } catch {}
+        }
+        
+        const roleLabel: Record<string, string> = { ADMIN: 'مدير', ACCOUNT_MANAGER: 'مدير حساب', DESIGNER: 'مصمم', DEVELOPER: 'مطوّر', SEO: 'SEO' };
+        
+        return (
+          <div className="bg-blue-50 rounded-2xl border border-blue-200 p-4 space-y-1">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-blue-700 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> آخر بريف</h4>
+              {senderName && (
+                <span className="text-[10px] text-blue-500 font-bold">
+                  من: {senderName} {senderRole ? `(${roleLabel[senderRole] || senderRole})` : ''}
+                  {timestamp && ` · ${new Date(timestamp).toLocaleString('ar-EG', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-blue-900 whitespace-pre-wrap leading-relaxed">{brief}</p>
+          </div>
+        );
+      })()}
+
+      {/* Approved Logo — always show if finalized (visible to ALL roles) */}
+      {delivery?.isFinalized && delivery?.selectedImageUrl && (
+        <div className="bg-emerald-50 rounded-2xl border-2 border-emerald-300 p-4 space-y-3">
+          <p className="text-sm font-bold text-emerald-800 flex items-center gap-2">✅ الشعار المعتمد من العميل</p>
+          <div className="bg-white rounded-xl p-4 border border-emerald-200 flex flex-col items-center gap-3">
+            <img src={delivery.selectedImageUrl} alt="الشعار المعتمد" className="w-40 h-40 object-contain rounded-xl border-2 border-emerald-300 bg-slate-50 p-3" />
+            <a href={delivery.selectedImageUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+              <ExternalLink className="w-3 h-3" /> عرض بالحجم الكامل
+            </a>
+          </div>
+          {delivery?.clientNotes && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <div><p className="text-xs font-bold text-amber-800">ملاحظات العميل:</p><p className="text-xs text-amber-700 mt-1 whitespace-pre-wrap">{delivery.clientNotes}</p></div>
+            </div>
+          )}
         </div>
       )}
 
@@ -404,14 +438,11 @@ export function DesignSection({ ticket, headers, staff, userRole, onRefresh, set
               <button onClick={() => save(false)} disabled={saving} className="px-4 py-2 bg-slate-600 text-white rounded-xl text-xs font-bold disabled:opacity-50 cursor-pointer">
                 {saving ? 'جاري الحفظ...' : 'حفظ'}
               </button>
-              <button onClick={() => save(true)} disabled={sending || !hasContent} className={`px-4 py-2 bg-violet-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 ${!hasContent || sending ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-                <Send className="w-3.5 h-3.5" /> {sending ? 'جاري الإرسال...' : 'إرسال لفريق SEO'}
-              </button>
             </div>
             {!hasContent && (
               <p className="text-[11px] text-amber-600 font-bold flex items-center gap-1.5">
                 <AlertCircle className="w-3.5 h-3.5" />
-                يجب إضافة رابط Figma أو رابط Drive أو رفع صورة تصميم واحدة على الأقل قبل الإرسال
+                يجب إضافة رابط Figma أو رابط Drive أو رفع صورة تصميم واحدة على الأقل
               </p>
             )}
           </div>
@@ -419,9 +450,9 @@ export function DesignSection({ ticket, headers, staff, userRole, onRefresh, set
       })()}
 
       {/* ═══════════════════════════════════════════════════════════════
-          SEO Review (Approve / Revision) — SEO role ONLY
+          AM/Admin Review (Approve / Revision) — when designer has saved/submitted
          ═══════════════════════════════════════════════════════════════ */}
-      {status === 'SENT_TO_SEO' && isSEO && (
+      {['DRAFT', 'SENT_TO_SEO', 'SENT_TO_AM'].includes(status) && isAdminOrAM && delivery && (figmaLink || driveLink || images.length > 0) && (
         <div className="bg-blue-50/50 rounded-2xl border border-blue-200 p-4 space-y-3">
           <p className="text-xs font-bold text-blue-800">التصميم بانتظار مراجعتك</p>
           {showRevForm ? (
@@ -429,50 +460,8 @@ export function DesignSection({ ticket, headers, staff, userRole, onRefresh, set
               <textarea value={revNotes} onChange={e => setRevNotes(e.target.value)} placeholder="ملاحظات التعديل..." rows={3}
                 className="w-full text-xs border border-blue-200 rounded-xl px-3 py-2 bg-white focus:outline-none resize-none" />
               <div className="flex gap-2">
-                <button onClick={() => seoReview('REVISION')} disabled={reviewLoading} className="px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-bold disabled:opacity-50">إرسال طلب التعديل</button>
-                <button onClick={() => setShowRevForm(false)} className="px-3 py-2 text-slate-500 text-xs font-bold">إلغاء</button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              <button onClick={() => seoReview('APPROVE')} disabled={reviewLoading} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold disabled:opacity-50 flex items-center gap-1.5 cursor-pointer">
-                <CheckCircle2 className="w-3.5 h-3.5" /> اعتماد التصميم
-              </button>
-              <button onClick={() => setShowRevForm(true)} className="px-4 py-2 bg-red-100 text-red-700 rounded-xl text-xs font-bold border border-red-200 cursor-pointer">طلب تعديل</button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* SENT_TO_SEO info for non-SEO roles (DESIGNER / ADMIN / AM) — badge only, no buttons */}
-      {status === 'SENT_TO_SEO' && !isSEO && (
-        <div className="bg-blue-50/50 rounded-2xl border border-blue-200 p-4">
-          <p className="text-xs font-bold text-blue-800">التصميم بانتظار مراجعة SEO</p>
-        </div>
-      )}
-
-      {/* SEO_APPROVED — info for all roles */}
-      {status === 'SEO_APPROVED' && (
-        <div className="bg-emerald-50 rounded-2xl border border-emerald-200 p-4">
-          <p className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
-            <CheckCircle2 className="w-3.5 h-3.5" /> التصميم معتمد من SEO ✅
-          </p>
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════
-          AM Review — ADMIN + ACCOUNT_MANAGER (SENT_TO_AM only — requires explicit transfer)
-         ═══════════════════════════════════════════════════════════════ */}
-      {status === 'SENT_TO_AM' && isAdminOrAM && (
-        <div className="bg-orange-50/50 rounded-2xl border border-orange-200 p-4 space-y-3">
-          <p className="text-xs font-bold text-orange-800">التصميم بانتظار مراجعتك</p>
-          {showRevForm ? (
-            <div className="space-y-2">
-              <textarea value={revNotes} onChange={e => setRevNotes(e.target.value)} placeholder="ملاحظات التعديل..." rows={3}
-                className="w-full text-xs border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none resize-none" />
-              <div className="flex gap-2">
-                <button onClick={() => amReview('REVISION')} disabled={reviewLoading} className="px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-bold disabled:opacity-50">إرسال طلب التعديل</button>
-                <button onClick={() => setShowRevForm(false)} className="px-3 py-2 text-slate-500 text-xs font-bold">إلغاء</button>
+                <button onClick={() => amReview('REVISION')} disabled={reviewLoading} className="px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-bold disabled:opacity-50 cursor-pointer">إرسال طلب التعديل</button>
+                <button onClick={() => setShowRevForm(false)} className="px-3 py-2 text-slate-500 text-xs font-bold cursor-pointer">إلغاء</button>
               </div>
             </div>
           ) : (
@@ -486,10 +475,10 @@ export function DesignSection({ ticket, headers, staff, userRole, onRefresh, set
         </div>
       )}
 
-      {/* SENT_TO_AM info for non-AM */}
-      {status === 'SENT_TO_AM' && !isAdminOrAM && (
-        <div className="bg-orange-50/50 rounded-2xl border border-orange-200 p-4">
-          <p className="text-xs font-bold text-orange-800">التصميم بانتظار مراجعة مدير الحساب</p>
+      {/* Waiting info for non-AM, non-Designer roles */}
+      {['DRAFT', 'SENT_TO_SEO', 'SENT_TO_AM'].includes(status) && !isAdminOrAM && !isDesigner && delivery && (figmaLink || driveLink || images.length > 0) && (
+        <div className="bg-blue-50/50 rounded-2xl border border-blue-200 p-4">
+          <p className="text-xs font-bold text-blue-800">التصميم بانتظار مراجعة مدير الحساب</p>
         </div>
       )}
 
@@ -505,16 +494,14 @@ export function DesignSection({ ticket, headers, staff, userRole, onRefresh, set
       {/* CLIENT_APPROVED — info for all */}
       {status === 'CLIENT_APPROVED' && (
         <div className="bg-emerald-50 rounded-2xl border border-emerald-200 p-4 space-y-3">
-          <p className="text-xs font-bold text-emerald-800">✅ التصميم معتمد من العميل</p>
+          <p className="text-sm font-bold text-emerald-800 flex items-center gap-2">✅ التصميم معتمد من العميل</p>
           {delivery?.selectedImageUrl && (
-            <div className="flex items-center gap-3 bg-white rounded-xl p-3 border border-emerald-200">
-              <img src={normalizeUrl(delivery.selectedImageUrl) || ''} alt="التصميم المعتمد" className="w-16 h-16 object-contain rounded-lg border-2 border-emerald-300 bg-slate-50 p-1" />
-              <div>
-                <p className="text-[10px] text-emerald-600 font-bold">التصميم المختار</p>
-                <a href={normalizeUrl(delivery.selectedImageUrl) || ''} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 mt-0.5">
-                  <ExternalLink className="w-3 h-3" /> عرض بالحجم الكامل
-                </a>
-              </div>
+            <div className="bg-white rounded-xl p-4 border border-emerald-200 flex flex-col items-center gap-3">
+              <p className="text-[10px] text-emerald-600 font-bold">التصميم المختار:</p>
+              <img src={delivery.selectedImageUrl} alt="التصميم المعتمد" className="w-32 h-32 object-contain rounded-xl border-2 border-emerald-300 bg-slate-50 p-2" />
+              <a href={delivery.selectedImageUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                <ExternalLink className="w-3 h-3" /> عرض بالحجم الكامل
+              </a>
             </div>
           )}
           {delivery?.clientNotes && (

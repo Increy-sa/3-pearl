@@ -178,6 +178,7 @@ model Ticket {
   auditLogs        AuditLog[]
   seoChecklist     SeoChecklist?
   productSupplierSelection ProductSupplierSelection?
+  taskCompletions  TaskCompletion[]
 }
 
 // ─── Notification ──────────────────────────────────────────────
@@ -422,7 +423,47 @@ model ProductSupplierSelection {
   productLink           String?
 
   clientNotes           String?
+  staffMessage          String?
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+}
+
+// ─── Dynamic Task Templates (Admin-managed) ────────────────────
+model TaskTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  category    String   // "SEO_SETUP" | "SEO_FINAL" | "DESIGNER" | "DEVELOPER" | "ACCOUNT_MANAGER"
+  group       String?
+  groupIcon   String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  isRequired  Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  completions TaskCompletion[]
+}
+
+// ─── Task Completion (per ticket) ──────────────────────────────
+model TaskCompletion {
+  id              String   @id @default(uuid())
+  ticketId        String
+  ticket          Ticket   @relation(fields: [ticketId], references: [id])
+  taskTemplateId  String
+  taskTemplate    TaskTemplate @relation(fields: [taskTemplateId], references: [id])
+  isCompleted     Boolean  @default(false)
+  completedAt     DateTime?
+  completedBy     String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@unique([ticketId, taskTemplateId])
+}
+
+// ─── App Settings (singleton) ──────────────────────────────────
+model AppSettings {
+  id                  String   @id @default("default")
+  restrictClientView  Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }

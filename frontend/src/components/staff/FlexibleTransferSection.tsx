@@ -49,6 +49,7 @@ export function FlexibleTransferSection({ ticket, headers, staff, userRole, onRe
   const [deliveryNotes, setDeliveryNotes] = useState('');
   const [delivering, setDelivering] = useState(false);
   const [deliveryData, setDeliveryData] = useState<any>(null);
+  const [restrictClientView, setRestrictClientView] = useState(false);
   const { showToast } = useToast();
 
   const isAdminOrAM = ['ADMIN', 'ACCOUNT_MANAGER'].includes(userRole);
@@ -62,6 +63,14 @@ export function FlexibleTransferSection({ ticket, headers, staff, userRole, onRe
         }).catch(() => {});
     }
   }, [selectedStage, showDeliveryPanel, ticket.id]);
+
+  // Fetch restrictClientView setting
+  useEffect(() => {
+    fetch(`${API}/api/settings/app`, { headers })
+      .then(r => r.json()).then(d => {
+        if (d && typeof d.restrictClientView === 'boolean') setRestrictClientView(d.restrictClientView);
+      }).catch(() => {});
+  }, []);
 
   // Fetch delivery summary data
   useEffect(() => {
@@ -86,7 +95,11 @@ export function FlexibleTransferSection({ ticket, headers, staff, userRole, onRe
   const filteredStaff = stageConfig?.staffRole
     ? staff.filter(s => s.role === stageConfig.staffRole && s.isActive)
     : [];
-  const availableStages = TARGET_STAGES;
+  // Filter out CLIENT stage if restricted and user is not ADMIN/AM
+  const availableStages = TARGET_STAGES.filter(s => {
+    if (s.key === 'CLIENT' && restrictClientView && !isAdminOrAM) return false;
+    return true;
+  });
 
   const handleTransfer = async () => {
     setTransferring(true);

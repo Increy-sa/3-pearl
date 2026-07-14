@@ -90,7 +90,7 @@ function IntakeCustomerSection({ ticketId, token }: { ticketId: string; token: s
   if (loading) return null;
 
   const allResolved = dataRequests.length > 0 && dataRequests.every((dr: any) => dr.isResolved);
-  const hasUnresolvedAMRequest = dataRequests.some((dr: any) => dr.fromRole === 'ACCOUNT_MANAGER' && !dr.isResolved);
+  const hasUnresolvedStaffRequest = dataRequests.some((dr: any) => dr.fromRole !== 'CUSTOMER' && !dr.isResolved);
 
   // ج- بعد اعتماد البيانات
   if (allResolved && dataRequests.length > 0) {
@@ -126,13 +126,13 @@ function IntakeCustomerSection({ ticketId, token }: { ticketId: string; token: s
   return (
     <div className="space-y-4">
       {/* AM request alert */}
-      {hasUnresolvedAMRequest && (
+      {hasUnresolvedStaffRequest && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 sm:p-6 flex items-start gap-3">
           <div className="w-10 h-10 bg-yellow-100 rounded-xl flex items-center justify-center shrink-0">
             <AlertCircle className="w-5 h-5 text-yellow-600" />
           </div>
           <div>
-            <p className="text-sm font-bold text-yellow-800">مدير الحساب يطلب منك بيانات إضافية</p>
+            <p className="text-sm font-bold text-yellow-800">فريق العمل يطلب منك بيانات إضافية</p>
             <p className="text-xs text-yellow-700 mt-1">يرجى الاطلاع على الرسالة أدناه والرد عليها.</p>
           </div>
         </div>
@@ -145,14 +145,14 @@ function IntakeCustomerSection({ ticketId, token }: { ticketId: string; token: s
           {dataRequests.map((dr: any) => (
             <div key={dr.id} className={`flex ${dr.fromRole === 'CUSTOMER' ? 'justify-start' : 'justify-end'}`}>
               <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
-                dr.fromRole === 'ACCOUNT_MANAGER'
+                dr.fromRole !== 'CUSTOMER'
                   ? 'bg-blue-50 border border-blue-100 text-blue-900'
                   : 'bg-slate-100 border border-slate-200 text-slate-800'
               }`}>
                 <p className="text-xs leading-relaxed whitespace-pre-wrap">{dr.message}</p>
                 <div className="flex items-center gap-2 mt-1.5">
                   <span className="text-[9px] text-slate-400">
-                    {dr.fromRole === 'ACCOUNT_MANAGER' ? 'مدير الحساب' : 'أنت'}
+                    {dr.fromRole === 'CUSTOMER' ? 'أنت' : dr.fromRole === 'ADMIN' ? 'مدير النظام' : dr.fromRole === 'ACCOUNT_MANAGER' ? 'مدير الحساب' : dr.fromRole === 'SEO' ? 'فريق SEO' : 'فريق العمل'}
                   </span>
                   <span className="text-[9px] text-slate-400">
                     {new Date(dr.createdAt).toLocaleDateString('ar-SA')} - {new Date(dr.createdAt).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}
@@ -170,7 +170,7 @@ function IntakeCustomerSection({ ticketId, token }: { ticketId: string; token: s
       </div>
 
       {/* Response form */}
-      {hasUnresolvedAMRequest && (
+      {hasUnresolvedStaffRequest && (
         <div className="bg-white rounded-2xl border border-slate-100 p-4 space-y-3">
           <textarea
             value={responseText}
@@ -403,9 +403,12 @@ function SeoCustomerSection({ ticket, token }: { ticket: any; token: string }) {
     );
   }
 
+  // No proposal exists at all — don't render anything
+  if (!proposal) return null;
+
   // PROPOSALS: not sent to client yet
-  if (!proposal || proposal.status !== 'SENT_TO_CLIENT') {
-    if (proposal?.status === 'CLIENT_APPROVED') {
+  if (proposal.status !== 'SENT_TO_CLIENT') {
+    if (proposal.status === 'CLIENT_APPROVED') {
       return (
         <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 sm:p-6 flex items-start gap-3">
           <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
@@ -416,15 +419,19 @@ function SeoCustomerSection({ ticket, token }: { ticket: any; token: string }) {
         </div>
       );
     }
-    return (
-      <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 sm:p-6 flex items-start gap-3">
-        <Clock className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-bold text-blue-800">جارٍ إعداد مقترحات الدومين لمتجرك</p>
-          <p className="text-xs text-blue-700 mt-1">فريقنا يعمل على تجهيز مقترحات الدومين. سيتم إبلاغك فور جاهزيتها.</p>
+    // Has proposal but not sent yet — show waiting message only in relevant stages
+    if (proposal.status === 'DRAFT' || proposal.status === 'CLIENT_REVISION') {
+      return (
+        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 sm:p-6 flex items-start gap-3">
+          <Clock className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-bold text-blue-800">جارٍ إعداد مقترحات الدومين لمتجرك</p>
+            <p className="text-xs text-blue-700 mt-1">فريقنا يعمل على تجهيز مقترحات الدومين. سيتم إبلاغك فور جاهزيتها.</p>
+          </div>
         </div>
-      </div>
-    );
+      );
+    }
+    return null;
   }
 
   // SENT_TO_CLIENT: show domain selection cards
@@ -571,6 +578,16 @@ function SupplierCustomerSection({ ticket, token }: { ticket: any; token: string
           </div>
         </div>
 
+        {selection.staffMessage && (
+          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-start gap-3">
+            <span className="text-lg">💬</span>
+            <div>
+              <p className="text-[10px] font-bold text-blue-500 mb-1">رسالة من فريق العمل:</p>
+              <p className="text-xs text-blue-800 whitespace-pre-wrap leading-relaxed">{selection.staffMessage}</p>
+            </div>
+          </div>
+        )}
+
         <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
           {selection.productFileUrl && (() => {
             const ext = selection.productFileUrl.split('.').pop()?.toLowerCase() || '';
@@ -614,7 +631,7 @@ function SupplierCustomerSection({ ticket, token }: { ticket: any; token: string
             className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer">
             {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ThumbsUp className="w-4 h-4" />} اعتماد المنتجات
           </button>
-          <button onClick={() => submitFileReview('REVISION')} disabled={sending}
+          <button onClick={() => submitFileReview('REVISION')} disabled={sending || !notes.trim()}
             className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 cursor-pointer">
             <PenLine className="w-4 h-4" /> طلب تعديل
           </button>
@@ -970,13 +987,13 @@ function DesignCustomerSection({ ticket, token }: { ticket: any; token: string }
         </div>
       )}
 
-      <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="ملاحظات (اختياري)..." rows={3}
+      <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="ملاحظات (مطلوبة في حالة طلب التعديل)..." rows={3}
         className="w-full text-sm border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:outline-none resize-none" />
       {error && <div className="flex items-start gap-2 p-3 bg-red-50 rounded-xl border border-red-100"><AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" /><p className="text-xs text-red-700">{error}</p></div>}
       <div className="flex flex-col sm:flex-row gap-3">
-        <button onClick={() => submitReview('APPROVE')} disabled={sending || (!wasPreviouslyApproved && hasMultiple && !selectedImage)}
+        <button onClick={() => submitReview('APPROVE')} disabled={sending}
           className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer">
-          <ThumbsUp className="w-4 h-4" /> {wasPreviouslyApproved ? 'اعتماد التحديثات' : selectedImage && hasMultiple ? 'اعتماد التصميم المختار' : 'اعتماد التصميم'}
+          <ThumbsUp className="w-4 h-4" /> {wasPreviouslyApproved ? 'اعتماد التحديثات' : 'اعتماد التصميم'}
         </button>
         <button onClick={() => submitReview('REVISION')} disabled={sending || !notes.trim()}
           className={`flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 ${sending || !notes.trim() ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
@@ -1259,6 +1276,7 @@ function DeliveredCustomerSection({ ticket, token }: { ticket: any; token: strin
   const [proposal, setProposal] = useState<any>(null);
   const [seoChecklist, setSeoChecklist] = useState<any>(null);
   const [delivery, setDelivery] = useState<any>(null);
+  const [supplier, setSupplier] = useState<any>(null);
   const [showPw, setShowPw] = useState(false);
   const [copied, setCopied] = useState('');
 
@@ -1267,6 +1285,7 @@ function DeliveredCustomerSection({ ticket, token }: { ticket: any; token: strin
     fetch(`${API_URL}/api/tickets/${ticket.id}/seo-proposals`, { headers: h }).then(r => r.json()).then(d => { if (d?.id) setProposal(d); }).catch(() => {});
     fetch(`${API_URL}/api/tickets/${ticket.id}/seo-checklist`, { headers: h }).then(r => r.json()).then(d => { if (d && !d.error) setSeoChecklist(d); }).catch(() => {});
     fetch(`${API_URL}/api/tickets/${ticket.id}/design-delivery`, { headers: h }).then(r => r.json()).then(d => { if (d?.id) setDelivery(d); }).catch(() => {});
+    fetch(`${API_URL}/api/tickets/${ticket.id}/product-supplier`, { headers: h }).then(r => r.json()).then(d => { if (d?.id) setSupplier(d); }).catch(() => {});
   }, [ticket.id, token]);
 
   const copy = (text: string, label: string) => {
@@ -1284,7 +1303,10 @@ function DeliveredCustomerSection({ ticket, token }: { ticket: any; token: strin
         {ticket.deliveredAt && <p className="text-xs text-emerald-600 mt-1">تاريخ التسليم: {new Date(ticket.deliveredAt).toLocaleDateString('ar-SA', { year: 'numeric', month: 'long', day: 'numeric' })}</p>}
       </div>
 
+      {/* ── بيانات المتجر ── */}
       <div className="bg-white rounded-2xl border border-emerald-200 p-5 space-y-4">
+        <h4 className="text-sm font-bold text-emerald-800">🏪 بيانات متجرك</h4>
+
         {proposal?.selectedName && (
           <div>
             <p className="text-[10px] text-emerald-600 font-bold mb-1">اسم المتجر</p>
@@ -1297,14 +1319,31 @@ function DeliveredCustomerSection({ ticket, token }: { ticket: any; token: strin
             <a href={`https://${proposal.selectedDomain}`} target="_blank" rel="noreferrer" className="text-sm font-bold text-blue-600 hover:underline ltr">{proposal.selectedDomain}</a>
           </div>
         )}
+        {ticket.storeDetails?.sallaStoreUrl && (
+          <div>
+            <p className="text-[10px] text-emerald-600 font-bold mb-1">رابط المتجر</p>
+            <a href={ensureUrl(ticket.storeDetails.sallaStoreUrl)} target="_blank" rel="noreferrer" className="text-sm font-bold text-blue-600 hover:underline flex items-center gap-1.5">
+              <ExternalLink className="w-3.5 h-3.5" /> {ticket.storeDetails.sallaStoreUrl}
+            </a>
+          </div>
+        )}
+        {ticket.deliveredSiteUrl && (
+          <div>
+            <p className="text-[10px] text-emerald-600 font-bold mb-1">رابط المتجر النهائي</p>
+            <a href={ensureUrl(ticket.deliveredSiteUrl)} target="_blank" rel="noreferrer" className="text-sm font-bold text-blue-600 hover:underline flex items-center gap-1.5">
+              <ExternalLink className="w-3.5 h-3.5" /> {ticket.deliveredSiteUrl}
+            </a>
+          </div>
+        )}
 
+        {/* بيانات الدخول */}
         {(seoChecklist?.storeEmail || seoChecklist?.storePassword) && (
           <div className="bg-slate-50 rounded-xl p-4 space-y-3 border border-slate-100">
-            <p className="text-xs font-bold text-slate-700">بيانات الدخول</p>
+            <p className="text-xs font-bold text-slate-700">🔑 بيانات الدخول</p>
             {seoChecklist.storeEmail && (
               <div className="flex items-center justify-between">
                 <div><p className="text-[10px] text-slate-400">الإيميل</p><p className="text-sm text-slate-800 ltr">{seoChecklist.storeEmail}</p></div>
-                <button onClick={() => copy(seoChecklist.storeEmail, 'email')} className="text-xs text-blue-600 font-bold px-2 py-1 rounded-lg hover:bg-blue-50">
+                <button onClick={() => copy(seoChecklist.storeEmail, 'email')} className="text-xs text-blue-600 font-bold px-2 py-1 rounded-lg hover:bg-blue-50 cursor-pointer">
                   {copied === 'email' ? '✓ تم النسخ' : 'نسخ'}
                 </button>
               </div>
@@ -1313,8 +1352,8 @@ function DeliveredCustomerSection({ ticket, token }: { ticket: any; token: strin
               <div className="flex items-center justify-between">
                 <div><p className="text-[10px] text-slate-400">كلمة المرور</p><p className="text-sm text-slate-800 font-mono">{showPw ? seoChecklist.storePassword : '•'.repeat(10)}</p></div>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => setShowPw(!showPw)} className="text-xs text-slate-500 font-bold px-2 py-1 rounded-lg hover:bg-slate-100">{showPw ? 'إخفاء' : 'عرض'}</button>
-                  <button onClick={() => copy(seoChecklist.storePassword, 'pw')} className="text-xs text-blue-600 font-bold px-2 py-1 rounded-lg hover:bg-blue-50">
+                  <button onClick={() => setShowPw(!showPw)} className="text-xs text-slate-500 font-bold px-2 py-1 rounded-lg hover:bg-slate-100 cursor-pointer">{showPw ? 'إخفاء' : 'عرض'}</button>
+                  <button onClick={() => copy(seoChecklist.storePassword, 'pw')} className="text-xs text-blue-600 font-bold px-2 py-1 rounded-lg hover:bg-blue-50 cursor-pointer">
                     {copied === 'pw' ? '✓ تم' : 'نسخ'}
                   </button>
                 </div>
@@ -1322,45 +1361,41 @@ function DeliveredCustomerSection({ ticket, token }: { ticket: any; token: strin
             )}
           </div>
         )}
+      </div>
 
-        {delivery?.figmaLink && (
-          <div>
-            <p className="text-[10px] text-emerald-600 font-bold mb-1">تصميم المتجر</p>
-            <a href={ensureUrl(delivery.figmaLink)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm font-bold text-violet-700 hover:underline">
-              <ExternalLink className="w-3.5 h-3.5" /> فتح في Figma
+      {/* ── التصاميم ── */}
+      {(delivery?.selectedImageUrl || delivery?.figmaLink || delivery?.driveLink || imgs.length > 0) && (
+        <div className="bg-white rounded-2xl border border-violet-200 p-5 space-y-4">
+          <h4 className="text-sm font-bold text-violet-800">🎨 التصاميم</h4>
+
+          {delivery?.selectedImageUrl && (
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-[10px] text-violet-600 font-bold">الشعار المعتمد</p>
+              <img src={delivery.selectedImageUrl} alt="الشعار المعتمد" className="w-32 h-32 object-contain rounded-xl border-2 border-violet-300 bg-slate-50 p-3" />
+            </div>
+          )}
+
+          {delivery?.figmaLink && (
+            <a href={ensureUrl(delivery.figmaLink)} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-3 bg-violet-50 border border-violet-200 rounded-xl text-sm font-bold text-violet-700 hover:bg-violet-100">
+              <ExternalLink className="w-3.5 h-3.5" /> فتح التصميم في Figma
             </a>
-          </div>
-        )}
+          )}
 
-        {delivery?.driveLink && (
-          <div>
-            <p className="text-[10px] text-emerald-600 font-bold mb-1">ملفات التصميم</p>
-            <a href={ensureUrl(delivery.driveLink)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm font-bold text-teal-700 hover:underline">
-              <ExternalLink className="w-3.5 h-3.5" /> فتح في Drive
+          {delivery?.driveLink && (
+            <a href={ensureUrl(delivery.driveLink)} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-3 bg-teal-50 border border-teal-200 rounded-xl text-sm font-bold text-teal-700 hover:bg-teal-100">
+              <ExternalLink className="w-3.5 h-3.5" /> ملفات التصميم في Drive
             </a>
-          </div>
-        )}
+          )}
 
-        {imgs.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-[10px] text-emerald-600 font-bold">التصاميم المعتمدة</p>
+          {imgs.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {imgs.map((url: string, i: number) => {
                 const normUrl = normalizeUrl(url) || url;
                 return (
-                  <div key={i} className="group relative rounded-xl border border-slate-200 overflow-hidden bg-slate-50 aspect-video sm:aspect-square hover:shadow-md transition-shadow">
-                    <img
-                      src={normUrl}
-                      alt={`تصميم ${i + 1}`}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                      <a
-                        href={normUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="bg-white p-2 rounded-full text-slate-800 hover:bg-slate-100 shadow transition-colors"
-                      >
+                  <div key={i} className="group relative rounded-xl border border-slate-200 overflow-hidden bg-slate-50 aspect-square hover:shadow-md transition-shadow">
+                    <img src={normUrl} alt={`تصميم ${i + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <a href={normUrl} target="_blank" rel="noreferrer" className="bg-white p-2 rounded-full text-slate-800 hover:bg-slate-100 shadow">
                         <ExternalLink className="w-4 h-4" />
                       </a>
                     </div>
@@ -1368,37 +1403,38 @@ function DeliveredCustomerSection({ ticket, token }: { ticket: any; token: strin
                 );
               })}
             </div>
-          </div>
-        )}
+          )}
 
-        {ticket.aiProposal?.generatedLogoUrl && (
-          <div className="space-y-2">
-            <p className="text-[10px] text-emerald-600 font-bold">الشعار المعتمد</p>
-            <div className="group relative rounded-xl border border-slate-200 overflow-hidden bg-slate-50 w-24 h-24 hover:shadow-md transition-shadow p-2">
-              <img
-                src={normalizeUrl(ticket.aiProposal.generatedLogoUrl) || ''}
-                alt="الشعار"
-                className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
-              />
-              <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-xl">
-                <a
-                  href={normalizeUrl(ticket.aiProposal.generatedLogoUrl) || ''}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="bg-white p-2 rounded-full text-slate-800 hover:bg-slate-100 shadow transition-colors"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-              </div>
+          {ticket.aiProposal?.generatedLogoUrl && !delivery?.selectedImageUrl && (
+            <div className="flex items-center gap-3">
+              <img src={normalizeUrl(ticket.aiProposal.generatedLogoUrl) || ''} alt="الشعار" className="w-16 h-16 object-contain rounded-xl border border-slate-200 bg-slate-50 p-2" />
+              <span className="text-xs text-slate-500 font-bold">الشعار المعتمد</span>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
+
+      {/* ── المنتجات ── */}
+      {(supplier?.productFileUrl || supplier?.productLink) && (
+        <div className="bg-white rounded-2xl border border-amber-200 p-5 space-y-3">
+          <h4 className="text-sm font-bold text-amber-800">📦 المنتجات</h4>
+          {supplier.productFileUrl && (
+            <a href={ensureUrl(supplier.productFileUrl)} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm font-bold text-amber-700 hover:bg-amber-100">
+              <ExternalLink className="w-3.5 h-3.5" /> ملف المنتجات
+            </a>
+          )}
+          {supplier.productLink && (
+            <a href={ensureUrl(supplier.productLink)} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm font-bold text-amber-700 hover:bg-amber-100">
+              <ExternalLink className="w-3.5 h-3.5" /> رابط المنتجات
+            </a>
+          )}
+        </div>
+      )}
 
       {ticket.finalDeliveryNotes && (
         <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
           <p className="text-xs font-bold text-blue-700 mb-1">ملاحظات التسليم</p>
-          <p className="text-xs text-blue-900">{ticket.finalDeliveryNotes}</p>
+          <p className="text-xs text-blue-900 whitespace-pre-wrap">{ticket.finalDeliveryNotes}</p>
         </div>
       )}
 
@@ -1484,6 +1520,7 @@ export function CustomerDashboard() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successType, setSuccessType]           = useState<'APPROVE' | 'REVISE' | null>(null);
   const [whatsappNumber, setWhatsappNumber]     = useState('');
+  const [approvedDomain, setApprovedDomain]       = useState('');
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -1519,7 +1556,15 @@ export function CustomerDashboard() {
     // Fetch WhatsApp number
     fetch(`${API_URL}/api/staff/settings/agency`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json()).then(d => { if (d?.whatsappNumber) setWhatsappNumber(d.whatsappNumber); }).catch(() => {});
+
   }, [token, user?.id, navigate, logout]); // user.id ensures refetch when user session changes
+
+  // Fetch domain when ticket loads
+  useEffect(() => {
+    if (!ticket?.id || !token) return;
+    fetch(`${API_URL}/api/tickets/${ticket.id}/seo-proposals`, { headers: { 'Authorization': `Bearer ${token}` } })
+      .then(r => r.json()).then(p => { if (p?.selectedDomain) setApprovedDomain(p.selectedDomain); }).catch(() => {});
+  }, [ticket?.id, token]);
 
 
   const handleApproval = async () => {
@@ -1642,7 +1687,7 @@ export function CustomerDashboard() {
       {/* Desktop Sidebar — hidden on mobile */}
       <aside className="hidden lg:flex w-72 bg-white border-l border-slate-200 flex-col h-screen sticky top-0 z-20">
         <div className="p-8 border-b border-slate-100">
-          <div className="text-2xl font-bold bg-gradient-to-l from-blue-600 to-indigo-600 bg-clip-text text-transparent">ادتوبيا</div>
+          <div className="text-2xl font-bold bg-gradient-to-l from-blue-600 to-indigo-600 bg-clip-text text-transparent">Three Pearl</div>
         </div>
         <nav className="flex-1 p-6 space-y-2">
           <button onClick={() => setActiveTab('tracking')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all ${activeTab === 'tracking' ? 'bg-blue-50 text-blue-600 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>
@@ -1667,7 +1712,7 @@ export function CustomerDashboard() {
 
       {/* Mobile Top Bar */}
       <div className="lg:hidden sticky top-0 z-30 bg-white/90 backdrop-blur-lg border-b border-slate-100 px-4 py-3 flex items-center justify-between">
-        <div className="text-lg font-bold bg-gradient-to-l from-blue-600 to-indigo-600 bg-clip-text text-transparent">ادتوبيا</div>
+        <div className="text-lg font-bold bg-gradient-to-l from-blue-600 to-indigo-600 bg-clip-text text-transparent">Three Pearl</div>
         <div className="flex gap-1">
           <button onClick={() => setActiveTab('tracking')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activeTab === 'tracking' ? 'bg-blue-50 text-blue-600' : 'text-slate-400'}`}>تتبع</button>
           <button onClick={() => setActiveTab('profile')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activeTab === 'profile' ? 'bg-blue-50 text-blue-600' : 'text-slate-400'}`}>بياناتي</button>
@@ -1691,6 +1736,54 @@ export function CustomerDashboard() {
 
         {activeTab === 'tracking' ? (
           <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+
+            {/* ── Quick Summary Cards ── */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              {/* Store Name */}
+              <div className="bg-white rounded-2xl border border-slate-100 p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center mb-3">
+                  <Type className="w-4 h-4 text-blue-600" />
+                </div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">اسم المتجر</p>
+                <p className="text-sm sm:text-base font-extrabold text-slate-900 mt-1 truncate">{ticket.aiProposal?.businessName || ticket.client?.businessName || '—'}</p>
+              </div>
+
+              {/* Current Stage */}
+              <div className="bg-white rounded-2xl border border-slate-100 p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-9 h-9 bg-indigo-50 rounded-xl flex items-center justify-center mb-3">
+                  <Activity className="w-4 h-4 text-indigo-600" />
+                </div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">المرحلة الحالية</p>
+                <p className="text-sm sm:text-base font-extrabold text-indigo-700 mt-1">{STEPS[currentStep]?.label || '—'}</p>
+              </div>
+
+              {/* Domain */}
+              <div className="bg-white rounded-2xl border border-slate-100 p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-9 h-9 bg-emerald-50 rounded-xl flex items-center justify-center mb-3">
+                  <Globe className="w-4 h-4 text-emerald-600" />
+                </div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">الدومين</p>
+                {(ticket.aiProposal?.selectedDomain || approvedDomain) ? (
+                  <a href={`https://${ticket.aiProposal?.selectedDomain || approvedDomain}`} target="_blank" rel="noreferrer" className="text-sm font-extrabold text-emerald-700 mt-1 hover:underline block truncate ltr">{ticket.aiProposal?.selectedDomain || approvedDomain}</a>
+                ) : (
+                  <p className="text-sm font-extrabold text-slate-300 mt-1">لم يُحدد بعد</p>
+                )}
+              </div>
+
+              {/* Progress */}
+              <div className="bg-white rounded-2xl border border-slate-100 p-4 sm:p-5 shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-9 h-9 bg-violet-50 rounded-xl flex items-center justify-center mb-3">
+                  <CheckCircle2 className="w-4 h-4 text-violet-600" />
+                </div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">التقدم</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <p className="text-sm sm:text-base font-extrabold text-violet-700">{Math.round((currentStep / (STEPS.length - 1)) * 100)}%</p>
+                  <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-l from-violet-500 to-indigo-500 rounded-full transition-all duration-1000" style={{ width: `${(currentStep / (STEPS.length - 1)) * 100}%` }} />
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {/* 🔔 DESIGN APPROVAL ALERT — shown when designs are ready for review */}
             {(ticket.stage === 'DESIGN') &&
@@ -1720,21 +1813,17 @@ export function CustomerDashboard() {
               <IntakeCustomerSection ticketId={ticket.id} token={token!} />
             )}
 
-            {/* 🏪 SEO_STORE_SETUP STAGE — Customer View */}
-            {ticket.stage === 'SEO_STORE_SETUP' && (
-              <SeoCustomerSection ticket={ticket} token={token!} />
-            )}
+            {/* 🏪 SEO Proposals — shows in all stages when SENT_TO_CLIENT */}
+            <SeoCustomerSection ticket={ticket} token={token!} />
 
-            {/* 🎨 DESIGN STAGE — Customer View */}
-            {ticket.stage === 'DESIGN' && (
-              <DesignCustomerSection ticket={ticket} token={token!} />
-            )}
+            {/* 🎨 DESIGN — Customer View (shows in all stages when SENT_TO_CLIENT) */}
+            <DesignCustomerSection ticket={ticket} token={token!} />
 
             {/* 🏪 Supplier Selection — shows in all stages when SENT_TO_CLIENT */}
             <SupplierCustomerSection ticket={ticket} token={token!} />
 
             {/* 📋 SEO_FINAL STAGE — Customer View */}
-            {ticket.stage === 'SEO_FINAL' && (
+            {['SEO_FINAL', 'DELIVERED'].includes(ticket.stage) && (
               <SeoFinalCustomerSection ticket={ticket} token={token!} />
             )}
 
