@@ -9,7 +9,7 @@ interface User {
   name: string;
   email: string;
   role: Role;
-  phone?: string | null;  // from ThreePearl webhook via login response
+  phone?: string | null;  // from webhook via login response
 }
 
 

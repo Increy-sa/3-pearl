@@ -18,6 +18,7 @@ import { STAGE_CHECKLISTS, areChecklistItemsComplete, getRoleForStage } from './
 import staffRoutes from './routes/staffRoutes';
 import webhookRoutes from './routes/webhookRoutes';
 import { validateLoginBody, validateOnboardingBody, validateLegalBody } from './utils/validators';
+import { sendWelcomeEmail, sendOtpEmail, generateOtpCode } from './services/emailService';
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -146,6 +147,18 @@ app.post('/api/upload', async (req, res) => {
 
 app.get('/api/health', (req, res) => { res.json({ status: 'ok' }); });
 
+// ── Test Email (for debugging — remove in production) ────────────────────────
+app.post('/api/test-email', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'email is required' });
+    const result = await sendWelcomeEmail(email, 'TestPassword123', 'عميل تجريبي');
+    res.json({ success: result, email, emailFrom: process.env.EMAIL_FROM });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/seed-staff', async (req, res) => {
   const staff = [
     { name: 'مدير النظام', email: 'admin@agency.com', role: 'ADMIN' },
@@ -267,7 +280,7 @@ app.post('/api/tickets/create-with-ai', async (req, res) => {
       }
 
       // ── Re-link ticket so dashboard always reads the updated ClientInfo ─────
-      // The ThreePearl webhook may have created a separate ClientInfo and linked the
+      // The webhook may have created a separate ClientInfo and linked the
       // ticket to it. Update the ticket's clientId to point to this record so
       // the dashboard's /api/customer/my-ticket returns the correct client data.
       const user = await prisma.user.findUnique({ where: { email: email as string } });
@@ -432,19 +445,20 @@ app.post('/api/auth/verify-email', async (req, res) => {
   if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
   if (user.isActive === false) return res.status(403).json({ error: 'الحساب معطل من قبل الإدارة' });
 
-  const isStaff = ['ADMIN', 'ACCOUNT_MANAGER', 'DESIGNER', 'DEVELOPER', 'SEO'].includes(user.role);
   const hasPassword = !!user.passwordHash;
 
   res.json({
     exists: true,
     role: user.role,
-    requiresPassword: isStaff && hasPassword,
+    requiresPassword: hasPassword,
     name: user.name,
   });
 });
 
 // ════════════════════════════════════════════════════════════════
-// POST /api/auth/login — Step 2: Complete login (with optional password)
+// POST /api/auth/login — Step 2: Validate credentials
+//   - Staff with password → returns token directly
+//   - Customer with password → sends OTP, returns { requiresOtp: true }
 // ════════════════════════════════════════════════════════════════
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
@@ -460,9 +474,10 @@ app.post('/api/auth/login', async (req, res) => {
   if (!user) return res.status(404).json({ error: 'User not found' });
   if (user.isActive === false) return res.status(403).json({ error: 'الحساب معطل من قبل الإدارة' });
 
-  // ── Password verification for staff roles ─────────────────────────────────
   const isStaff = ['ADMIN', 'ACCOUNT_MANAGER', 'DESIGNER', 'DEVELOPER', 'SEO'].includes(user.role);
-  if (isStaff && user.passwordHash) {
+
+  // ── Password verification for ALL users with passwordHash ─────────────────
+  if (user.passwordHash) {
     if (!password) {
       return res.status(401).json({ error: 'كلمة المرور مطلوبة' });
     }
@@ -473,29 +488,137 @@ app.post('/api/auth/login', async (req, res) => {
   }
   // ───────────────────────────────────────────────────────────────────────────
 
-  // ── Onboarding Guard ──────────────────────────────────────────────────────
-  let isProfileComplete = true;
-  let customerPhone: string | null = null;
+  // ── Customer OTP Flow ─────────────────────────────────────────────────────
   if (user.role === 'CUSTOMER') {
-    const clientInfo = await prisma.clientInfo.findFirst({
-      where: {
-        email: user.email,
-        NOT: { industry: 'غير محدد' },
-      },
-    });
-    isProfileComplete = !!clientInfo;
-    const anyClientInfo = clientInfo ?? await prisma.clientInfo.findFirst({ where: { email: user.email } });
-    customerPhone = anyClientInfo?.phone ?? null;
-  }
-  // ─────────────────────────────────────────────────────────────────────────
+    // Generate and send OTP
+    const otpCode = generateOtpCode();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
+    // Invalidate any existing unused OTPs for this user
+    await prisma.otpCode.updateMany({
+      where: { userId: user.id, isUsed: false },
+      data: { isUsed: true },
+    });
+
+    // Create new OTP
+    await prisma.otpCode.create({
+      data: { userId: user.id, code: otpCode, expiresAt },
+    });
+
+    // Send OTP email (non-blocking — don't fail login if email fails)
+    sendOtpEmail(user.email, user.name, otpCode);
+
+    return res.json({
+      requiresOtp: true,
+      email: user.email,
+      name: user.name,
+    });
+  }
+  // ───────────────────────────────────────────────────────────────────────────
+
+  // ── Staff Direct Login ────────────────────────────────────────────────────
   const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
   res.json({
     token,
-    isProfileComplete,
-    user: { id: user.id, email: user.email, role: user.role, name: user.name, phone: customerPhone },
+    isProfileComplete: true,
+    user: { id: user.id, email: user.email, role: user.role, name: user.name },
   });
 
+});
+
+// ════════════════════════════════════════════════════════════════
+// POST /api/auth/send-otp — Resend OTP (for customers)
+// ════════════════════════════════════════════════════════════════
+app.post('/api/auth/send-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'البريد الإلكتروني مطلوب' });
+
+    const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+    if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
+    if (user.isActive === false) return res.status(403).json({ error: 'الحساب معطل' });
+
+    const otpCode = generateOtpCode();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+
+    // Invalidate previous OTPs
+    await prisma.otpCode.updateMany({
+      where: { userId: user.id, isUsed: false },
+      data: { isUsed: true },
+    });
+
+    await prisma.otpCode.create({
+      data: { userId: user.id, code: otpCode, expiresAt },
+    });
+
+    await sendOtpEmail(user.email, user.name, otpCode);
+
+    res.json({ success: true, message: 'تم إرسال رمز التحقق' });
+  } catch (e: any) {
+    console.error('[send-otp] Error:', e.message);
+    res.status(500).json({ error: 'فشل إرسال رمز التحقق' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════
+// POST /api/auth/verify-otp — Verify OTP and issue token
+// ════════════════════════════════════════════════════════════════
+app.post('/api/auth/verify-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) return res.status(400).json({ error: 'البريد الإلكتروني ورمز التحقق مطلوبان' });
+
+    const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+    if (!user) return res.status(404).json({ error: 'المستخدم غير موجود' });
+    if (user.isActive === false) return res.status(403).json({ error: 'الحساب معطل' });
+
+    // Find valid OTP
+    const validOtp = await prisma.otpCode.findFirst({
+      where: {
+        userId: user.id,
+        code: otp.trim(),
+        isUsed: false,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!validOtp) {
+      return res.status(401).json({ error: 'رمز التحقق غير صحيح أو منتهي الصلاحية' });
+    }
+
+    // Mark OTP as used
+    await prisma.otpCode.update({
+      where: { id: validOtp.id },
+      data: { isUsed: true },
+    });
+
+    // ── Onboarding Guard ──────────────────────────────────────────────────────
+    let isProfileComplete = true;
+    let customerPhone: string | null = null;
+    if (user.role === 'CUSTOMER') {
+      const clientInfo = await prisma.clientInfo.findFirst({
+        where: {
+          email: user.email,
+          NOT: { industry: 'غير محدد' },
+        },
+      });
+      isProfileComplete = !!clientInfo;
+      const anyClientInfo = clientInfo ?? await prisma.clientInfo.findFirst({ where: { email: user.email } });
+      customerPhone = anyClientInfo?.phone ?? null;
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
+    const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({
+      token,
+      isProfileComplete,
+      user: { id: user.id, email: user.email, role: user.role, name: user.name, phone: customerPhone },
+    });
+  } catch (e: any) {
+    console.error('[verify-otp] Error:', e.message);
+    res.status(500).json({ error: 'فشل التحقق من الرمز' });
+  }
 });
 
 // ════════════════════════════════════════════════════════════════
@@ -3068,9 +3191,13 @@ app.post('/api/tickets/create-manual', authenticateToken, async (req: AuthReques
       },
     });
 
+    // ── Send Welcome Email with credentials ───────────────────────────────
+    sendWelcomeEmail(email.trim().toLowerCase(), password, fullName)
+      .catch(err => console.error('[create-manual] Welcome email failed:', err));
+
     res.status(201).json({
       success: true,
-      message: 'تم إضافة العميل بنجاح',
+      message: 'تم إضافة العميل بنجاح وتم إرسال بيانات الدخول على الإيميل',
       data: { userId: newUser.id, ticketId: ticket.id, stage: ticket.stage },
     });
   } catch (e: any) {

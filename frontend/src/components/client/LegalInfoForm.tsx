@@ -77,13 +77,13 @@ export function LegalInfoForm({ onNext, initialData }: Props) {
   };
   // ────────────────────────────────────────────────────────────────────────
 
-  // For ThreePearl users who are already authenticated, pre-fill their known data
+  // For authenticated users, pre-fill their known data
   // and prevent editing so they don't have to re-enter webhook-provided info.
   const isAuthenticated = !!user;
   const prefill = {
     customerName: user?.name || initialData?.customerName || '',
     email:        user?.email || initialData?.email || '',
-    phone:        user?.phone || initialData?.phone || '',  // from ThreePearl webhook
+    phone:        user?.phone || initialData?.phone || '',  // from webhook
   };
 
   const [hasDocument, setHasDocument] = useState<string | null>(

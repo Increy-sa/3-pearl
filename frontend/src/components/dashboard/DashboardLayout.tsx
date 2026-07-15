@@ -130,7 +130,7 @@ export function DashboardLayout() {
       {/* Logo */}
       <div className="p-5 lg:p-6 border-b border-slate-800">
         <h1 className="text-lg lg:text-xl font-bold text-white flex items-center gap-2">
-          <LayoutDashboard className="w-5 h-5 lg:w-6 lg:h-6 text-indigo-400 shrink-0" /> Three Pearl
+          <LayoutDashboard className="w-5 h-5 lg:w-6 lg:h-6 text-indigo-400 shrink-0" /> Dot Media Operation
         </h1>
       </div>
 

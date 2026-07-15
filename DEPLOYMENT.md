@@ -75,7 +75,7 @@ BASE_URL="https://capsystem.net"
 ADTOPIA_WEBHOOK_SECRET="مفتاح-الويب-هوك-السري"
 ENCRYPTION_KEY="مفتاح-تشفير-32-حرف-بالضبط"
 RESEND_API_KEY="مفتاح-ريسند-الحقيقي"
-EMAIL_FROM="Three Pearl <email@capsystem.net>"
+EMAIL_FROM="Dot Media Operation <email@capsystem.net>"
 ```
 
 ### توليد Prisma وبناء المشروع
@@ -278,4 +278,4 @@ bash /var/www/capsystem/deploy-update.sh
 - [ ] SSL شهادة سارية (`https://capsystem.net`)
 - [ ] Seed staff users تم تنفيذه
 - [ ] كلمات المرور تم تعيينها للموظفين
-- [ ] Webhook URL تم تحديثه في ThreePearl
+- [ ] Webhook URL تم تحديثه

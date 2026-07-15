@@ -129,10 +129,10 @@ export function AdminSettings() {
         body: JSON.stringify(agencyProfile),
       });
       if (res.ok) {
-        showToast('تم حفظ بيانات Three Pearl ✅');
+        showToast('تم حفظ بيانات Dot Media Operation ✅');
       } else {
         const err = await res.json();
-        showToast(err.error || 'فشل حفظ بيانات Three Pearl', 'error');
+        showToast(err.error || 'فشل حفظ بيانات Dot Media Operation', 'error');
       }
     } finally {
       setSavingProfile(false);
@@ -209,7 +209,7 @@ export function AdminSettings() {
     <div className="space-y-4 sm:space-y-6" dir="rtl">
       <div>
         <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900">{isAdmin ? 'إعدادات المدير' : 'الإعدادات'}</h1>
-        <p className="text-xs sm:text-sm text-slate-500 mt-1">{isAdmin ? 'إدارة بيانات Three Pearl وتكوين SLA العام للنظام.' : 'إدارة حسابك وتغيير كلمة المرور.'}</p>
+        <p className="text-xs sm:text-sm text-slate-500 mt-1">{isAdmin ? 'إدارة بيانات Dot Media Operation وتكوين SLA العام للنظام.' : 'إدارة حسابك وتغيير كلمة المرور.'}</p>
       </div>
 
       {/* ── Change Password ───────────────────────────────────────── */}
@@ -330,7 +330,7 @@ export function AdminSettings() {
       {isAdmin && (
       <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
         <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-          <Settings className="w-5 h-5 text-indigo-500" /> بيانات Three Pearl
+          <Settings className="w-5 h-5 text-indigo-500" /> بيانات Dot Media Operation
         </h2>
         <form onSubmit={saveProfile} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
@@ -375,7 +375,7 @@ export function AdminSettings() {
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-60 cursor-pointer"
             >
               {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              حفظ بيانات Three Pearl
+              حفظ بيانات Dot Media Operation
             </button>
           </div>
         </form>
